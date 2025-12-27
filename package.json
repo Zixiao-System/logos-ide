@@ -13,7 +13,12 @@
     "electron:build": "npm run build",
     "typecheck": "vue-tsc --noEmit",
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx --fix",
-    "postinstall": "electron-rebuild -f -w node-pty"
+    "postinstall": "electron-rebuild -f -w node-pty",
+    "download:lsp": "npx ts-node scripts/download-lsp-servers.ts",
+    "download:lsp:pyright": "npx ts-node scripts/download-lsp-servers.ts --pyright",
+    "download:lsp:gopls": "npx ts-node scripts/download-lsp-servers.ts --gopls",
+    "download:lsp:rust-analyzer": "npx ts-node scripts/download-lsp-servers.ts --rust-analyzer",
+    "download:lsp:jdtls": "npx ts-node scripts/download-lsp-servers.ts --jdtls"
   },
   "keywords": [
     "prts",
@@ -32,6 +37,9 @@
     "monaco-editor": "^0.47.0",
     "node-pty": "^1.0.0",
     "pinia": "^2.1.7",
+    "vscode-jsonrpc": "^8.2.1",
+    "vscode-languageserver-protocol": "^3.17.5",
+    "vscode-uri": "^3.1.0",
     "vue": "^3.4.21",
     "vue-router": "^4.3.0"
   },
@@ -50,6 +58,7 @@
     "eslint": "^8.57.1",
     "eslint-plugin-vue": "^9.33.0",
     "globals": "^16.5.0",
+    "ts-node": "^10.9.2",
     "typescript": "^5.4.3",
     "typescript-eslint": "^8.50.1",
     "vite": "^5.2.8",
@@ -67,27 +76,73 @@
       "dist/**/*",
       "dist-electron/**/*"
     ],
+    "extraResources": [
+      {
+        "from": "resources/bin/${os}-${arch}",
+        "to": "bin",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
     "mac": {
       "category": "public.app-category.developer-tools",
       "icon": "build/icon.icns",
       "target": [
-        "dmg",
-        "zip"
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
       ]
     },
     "win": {
       "icon": "build/icon.ico",
       "target": [
-        "nsis",
-        "portable"
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
       ]
     },
     "linux": {
       "icon": "build/icon.png",
       "target": [
-        "AppImage",
-        "deb",
-        "rpm"
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "rpm",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "category": "Development"
     }

@@ -5,6 +5,7 @@ import { registerGitHandlers } from './services/gitService'
 import { registerTerminalHandlers, cleanupTerminals } from './services/terminalService'
 import { registerGitHubHandlers } from './services/githubService'
 import { registerGitLabHandlers } from './services/gitlabService'
+import { registerIntelligenceHandlers } from './services/intelligenceService'
 
 // 环境变量
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
@@ -107,6 +108,9 @@ function registerAllHandlers() {
 
   // ============ GitLab CI ============
   registerGitLabHandlers()
+
+  // ============ 代码智能 ============
+  registerIntelligenceHandlers(getMainWindow)
 }
 
 // 应用准备好后创建窗口

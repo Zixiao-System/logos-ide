@@ -83,3 +83,4 @@ temp/
 release/
 
 /dist-electron/
+/resources/

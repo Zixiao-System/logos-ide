@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useEditorStore } from '@/stores/editor'
 import { useGitStore } from '@/stores/git'
 import { useThemeStore } from '@/stores/theme'
 import { FileExplorer } from '@/components/FileExplorer'
 import { GitPanel } from '@/components/Git'
+import type { IndexingProgress, LanguageServerStatus } from '@/types/intelligence'
 
 // 导入 MDUI 图标
 import '@mdui/icons/folder.js'
@@ -19,6 +20,9 @@ import '@mdui/icons/close.js'
 import '@mdui/icons/sync.js'
 import '@mdui/icons/dark-mode.js'
 import '@mdui/icons/light-mode.js'
+import '@mdui/icons/hourglass-empty.js'
+import '@mdui/icons/check-circle.js'
+import '@mdui/icons/error.js'
 
 
 const router = useRouter()
@@ -26,6 +30,15 @@ const route = useRoute()
 const editorStore = useEditorStore()
 const gitStore = useGitStore()
 const themeStore = useThemeStore()
+
+// 索引进度状态
+const indexingProgress = ref<IndexingProgress | null>(null)
+let unsubscribeProgress: (() => void) | null = null
+
+// LSP 服务器状态
+const lspServers = ref<LanguageServerStatus[]>([])
+let unsubscribeLSPStatus: (() => void) | null = null
+
 
 // UI 状态
 const sidebarOpen = ref(true)
@@ -83,6 +96,43 @@ onMounted(async () => {
   if (window.electronAPI) {
     const version = await window.electronAPI.getVersion()
     console.log('Logos IDE version:', version)
+
+    // 订阅索引进度
+    unsubscribeProgress = window.electronAPI.intelligence.onIndexingProgress((progress) => {
+      indexingProgress.value = progress
+    })
+
+    // 订阅 LSP 服务器状态
+    unsubscribeLSPStatus = window.electronAPI.intelligence.onLSPServerStatus((event) => {
+      const index = lspServers.value.findIndex(s => s.language === event.languageId)
+      const status: LanguageServerStatus = {
+        language: event.languageId,
+        status: event.status as 'starting' | 'ready' | 'error' | 'stopped',
+        message: event.message
+      }
+      if (index >= 0) {
+        lspServers.value[index] = status
+      } else {
+        lspServers.value.push(status)
+      }
+    })
+
+    // 获取初始服务状态
+    try {
+      const serviceStatus = await window.electronAPI.intelligence.getServiceStatus()
+      lspServers.value = serviceStatus.servers
+    } catch {
+      // 忽略初始化错误
+    }
+  }
+})
+
+onUnmounted(() => {
+  if (unsubscribeProgress) {
+    unsubscribeProgress()
+  }
+  if (unsubscribeLSPStatus) {
+    unsubscribeLSPStatus()
   }
 })
 </script>
@@ -199,6 +249,44 @@ onMounted(async () => {
         <span class="status-item" v-if="editorStore.hasUnsavedChanges">
           <mdui-icon-sync></mdui-icon-sync>
           {{ editorStore.dirtyTabs.length }} 未保存
+        </span>
+        <!-- 索引进度 -->
+        <span
+          class="status-item indexing-status"
+          v-if="indexingProgress && indexingProgress.phase !== 'ready' && indexingProgress.phase !== 'idle'"
+          :title="indexingProgress.currentFile || indexingProgress.message"
+        >
+          <mdui-icon-hourglass-empty class="spinning"></mdui-icon-hourglass-empty>
+          <span class="indexing-text">{{ indexingProgress.message }}</span>
+          <span class="indexing-progress">{{ indexingProgress.percentage }}%</span>
+        </span>
+        <!-- LSP 服务器状态 -->
+        <span
+          v-for="server in lspServers.filter(s => s.status === 'ready')"
+          :key="server.language"
+          class="status-item lsp-status ready"
+          :title="`${server.language} LSP ready`"
+        >
+          <mdui-icon-check-circle></mdui-icon-check-circle>
+          {{ server.language }}
+        </span>
+        <span
+          v-for="server in lspServers.filter(s => s.status === 'starting')"
+          :key="server.language"
+          class="status-item lsp-status starting"
+          :title="`${server.language} LSP starting...`"
+        >
+          <mdui-icon-hourglass-empty class="spinning"></mdui-icon-hourglass-empty>
+          {{ server.language }}
+        </span>
+        <span
+          v-for="server in lspServers.filter(s => s.status === 'error')"
+          :key="server.language"
+          class="status-item lsp-status error"
+          :title="server.message || `${server.language} LSP error`"
+        >
+          <mdui-icon-error></mdui-icon-error>
+          {{ server.language }}
         </span>
       </div>
       <div class="status-right">
@@ -456,8 +544,64 @@ onMounted(async () => {
 }
 
 .status-item mdui-icon-source,
-.status-item mdui-icon-sync {
+.status-item mdui-icon-sync,
+.status-item mdui-icon-hourglass-empty {
   font-size: 14px;
+}
+
+/* 索引进度样式 */
+.indexing-status {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 0 8px;
+  border-radius: 4px;
+}
+
+.indexing-text {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.indexing-progress {
+  font-weight: 500;
+  margin-left: 4px;
+}
+
+.spinning {
+  animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* LSP 服务器状态样式 */
+.lsp-status {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.lsp-status.ready {
+  opacity: 0.8;
+}
+
+.lsp-status.starting {
+  opacity: 0.6;
+}
+
+.lsp-status.error {
+  background: rgba(255, 100, 100, 0.2);
+}
+
+.lsp-status mdui-icon-check-circle,
+.lsp-status mdui-icon-error,
+.lsp-status mdui-icon-hourglass-empty {
+  font-size: 12px;
 }
 
 /* 主题切换开关 */

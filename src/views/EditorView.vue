@@ -7,6 +7,8 @@
 import { ref, watch, onMounted, onUnmounted, computed, nextTick } from 'vue'
 import * as monaco from 'monaco-editor'
 import { useEditorStore } from '@/stores/editor'
+import { useFileExplorerStore } from '@/stores/fileExplorer'
+import { getIntelligenceManager, destroyIntelligenceManager } from '@/logos'
 
 // 导入 MDUI 图标
 import '@mdui/icons/chevron-right.js'
@@ -14,9 +16,16 @@ import '@mdui/icons/folder-open.js'
 import '@mdui/icons/insert-drive-file.js'
 
 const editorStore = useEditorStore()
+const fileExplorerStore = useFileExplorerStore()
 const editorContainer = ref<HTMLElement | null>(null)
 let editor: monaco.editor.IStandaloneCodeEditor | null = null
 const models = new Map<string, monaco.editor.ITextModel>()
+
+// 代码智能管理器
+const intelligenceManager = getIntelligenceManager()
+
+// 诊断更新防抖定时器
+let diagnosticsTimer: ReturnType<typeof setTimeout> | null = null
 
 // 当前活动标签页
 const activeTab = computed(() => editorStore.activeTab)
@@ -89,6 +98,20 @@ function initEditor() {
     if (activeTab.value && editor) {
       const content = editor.getValue()
       editorStore.updateContent(activeTab.value.id, content)
+
+      // 同步到代码智能服务
+      intelligenceManager.syncFile(activeTab.value.path, content)
+
+      // 防抖更新诊断
+      if (diagnosticsTimer) {
+        clearTimeout(diagnosticsTimer)
+      }
+      diagnosticsTimer = setTimeout(() => {
+        const model = editor?.getModel()
+        if (model) {
+          intelligenceManager.updateDiagnostics(model)
+        }
+      }, 500)
     }
   })
 
@@ -128,8 +151,16 @@ watch(editorContainer, (container) => {
   }
 })
 
-onMounted(() => {
+onMounted(async () => {
   initEditor()
+
+  // 初始化代码智能服务
+  await intelligenceManager.initialize()
+
+  // 如果已有项目打开，则打开项目
+  if (fileExplorerStore.rootPath) {
+    await intelligenceManager.openProject(fileExplorerStore.rootPath)
+  }
 })
 
 // 加载标签页到编辑器
@@ -147,6 +178,12 @@ function loadTabIntoEditor(tab: typeof activeTab.value) {
   // 获取或创建 model
   const model = getOrCreateModel(tab.path, tab.content, tab.language)
   editor.setModel(model)
+
+  // 同步文件内容到代码智能服务
+  intelligenceManager.syncFile(tab.path, tab.content)
+
+  // 更新诊断
+  intelligenceManager.updateDiagnostics(model)
 
   // 恢复视图状态
   if (tab.viewState) {
@@ -204,7 +241,23 @@ watch(() => editorStore.config, (config) => {
   monaco.editor.setTheme(config.theme)
 }, { deep: true })
 
+// 监听项目路径变化
+watch(() => fileExplorerStore.rootPath, async (newPath, oldPath) => {
+  if (oldPath) {
+    await intelligenceManager.closeProject()
+  }
+  if (newPath) {
+    await intelligenceManager.openProject(newPath)
+  }
+})
+
 onUnmounted(() => {
+  // 清理诊断定时器
+  if (diagnosticsTimer) {
+    clearTimeout(diagnosticsTimer)
+    diagnosticsTimer = null
+  }
+
   // 清理所有 models
   for (const [path] of models) {
     disposeModel(path)
@@ -212,6 +265,9 @@ onUnmounted(() => {
 
   // 销毁编辑器
   editor?.dispose()
+
+  // 清理代码智能服务
+  destroyIntelligenceManager()
 })
 </script>
 

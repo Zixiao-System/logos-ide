@@ -90,6 +90,161 @@ interface TerminalExitEvent {
   signal?: number
 }
 
+// ============ 代码智能相关类型 ============
+
+/** 位置 */
+interface Position {
+  line: number
+  column: number
+}
+
+/** 范围 */
+interface Range {
+  start: Position
+  end: Position
+}
+
+/** 补全项 */
+interface CompletionItem {
+  label: string
+  kind: number
+  detail?: string
+  documentation?: string | { value: string; isTrusted?: boolean }
+  insertText: string
+  insertTextRules?: number
+  sortText?: string
+  filterText?: string
+  preselect?: boolean
+  range?: {
+    startLineNumber: number
+    startColumn: number
+    endLineNumber: number
+    endColumn: number
+  }
+}
+
+/** 补全结果 */
+interface CompletionResult {
+  suggestions: CompletionItem[]
+  incomplete?: boolean
+}
+
+/** 定义位置 */
+interface DefinitionLocation {
+  uri: string
+  range: Range
+}
+
+/** 引用位置 */
+interface ReferenceLocation {
+  uri: string
+  range: Range
+  isDefinition?: boolean
+}
+
+/** 诊断信息 */
+interface Diagnostic {
+  range: Range
+  message: string
+  severity: 'error' | 'warning' | 'info' | 'hint'
+  code?: string | number
+  source?: string
+}
+
+/** 悬停信息 */
+interface HoverInfo {
+  contents: Array<{ value: string; language?: string }>
+  range?: Range
+}
+
+/** 签名帮助 */
+interface SignatureHelp {
+  signatures: Array<{
+    label: string
+    documentation?: string
+    parameters: Array<{ label: string | [number, number]; documentation?: string }>
+    activeParameter?: number
+  }>
+  activeSignature: number
+  activeParameter: number
+}
+
+/** 内联提示 */
+interface InlayHint {
+  position: Position
+  label: string
+  kind: 'type' | 'parameter'
+  paddingLeft?: boolean
+  paddingRight?: boolean
+}
+
+/** 重命名准备结果 */
+interface PrepareRenameResult {
+  range: Range
+  placeholder: string
+}
+
+/** 文本编辑 */
+interface TextEdit {
+  range: Range
+  newText: string
+}
+
+/** 工作区编辑 */
+interface WorkspaceEdit {
+  changes: Record<string, TextEdit[]>
+}
+
+/** 重构动作 */
+interface RefactorAction {
+  title: string
+  kind: string
+  description?: string
+  isPreferred?: boolean
+  disabled?: { reason: string }
+}
+
+/** 语言服务器状态 */
+interface LanguageServerStatus {
+  language: string
+  status: 'starting' | 'ready' | 'error' | 'stopped'
+  message?: string
+}
+
+/** 索引阶段 */
+type IndexingPhase = 'idle' | 'scanning' | 'parsing' | 'indexing' | 'ready'
+
+/** 索引进度 */
+interface IndexingProgress {
+  phase: IndexingPhase
+  message: string
+  currentFile?: string
+  processedFiles: number
+  totalFiles: number
+  percentage: number
+  startTime?: number
+  estimatedTimeRemaining?: number
+}
+
+/** 分析状态 */
+interface AnalysisStatus {
+  isAnalyzing: boolean
+  currentFile?: string
+  queuedFiles: number
+}
+
+/** Logos 服务状态 */
+interface LogosServiceStatus {
+  indexing: IndexingProgress
+  analysis: AnalysisStatus
+  servers: LanguageServerStatus[]
+  diagnostics: {
+    errors: number
+    warnings: number
+    hints: number
+  }
+}
+
 // 暴露给渲染进程的 API
 contextBridge.exposeInMainWorld('electronAPI', {
   // ============ 应用信息 ============
@@ -449,6 +604,154 @@ contextBridge.exposeInMainWorld('electronAPI', {
       token?: string
     ): Promise<string> =>
       ipcRenderer.invoke('gitlab:getJobLog', repoPath, baseUrl, jobId, token)
+  },
+
+  // ============ 代码智能 ============
+  intelligence: {
+    // ============ 补全 ============
+    getCompletions: (
+      filePath: string,
+      position: Position,
+      triggerCharacter?: string
+    ): Promise<CompletionResult> =>
+      ipcRenderer.invoke('intelligence:completions', filePath, position, triggerCharacter),
+
+    // ============ 定义跳转 ============
+    getDefinitions: (
+      filePath: string,
+      position: Position
+    ): Promise<DefinitionLocation[]> =>
+      ipcRenderer.invoke('intelligence:definitions', filePath, position),
+
+    // ============ 查找引用 ============
+    getReferences: (
+      filePath: string,
+      position: Position,
+      includeDeclaration?: boolean
+    ): Promise<ReferenceLocation[]> =>
+      ipcRenderer.invoke('intelligence:references', filePath, position, includeDeclaration),
+
+    // ============ 诊断信息 ============
+    getDiagnostics: (filePath: string): Promise<Diagnostic[]> =>
+      ipcRenderer.invoke('intelligence:diagnostics', filePath),
+
+    // ============ 悬停信息 ============
+    getHover: (
+      filePath: string,
+      position: Position
+    ): Promise<HoverInfo | null> =>
+      ipcRenderer.invoke('intelligence:hover', filePath, position),
+
+    // ============ 签名帮助 ============
+    getSignatureHelp: (
+      filePath: string,
+      position: Position,
+      triggerCharacter?: string
+    ): Promise<SignatureHelp | null> =>
+      ipcRenderer.invoke('intelligence:signatureHelp', filePath, position, triggerCharacter),
+
+    // ============ 内联提示 ============
+    getInlayHints: (
+      filePath: string,
+      range: Range
+    ): Promise<InlayHint[]> =>
+      ipcRenderer.invoke('intelligence:inlayHints', filePath, range),
+
+    // ============ 重命名 ============
+    prepareRename: (
+      filePath: string,
+      position: Position
+    ): Promise<PrepareRenameResult | null> =>
+      ipcRenderer.invoke('intelligence:prepareRename', filePath, position),
+
+    rename: (
+      filePath: string,
+      position: Position,
+      newName: string
+    ): Promise<WorkspaceEdit | null> =>
+      ipcRenderer.invoke('intelligence:rename', filePath, position, newName),
+
+    // ============ 重构 ============
+    getRefactorActions: (
+      filePath: string,
+      range: Range
+    ): Promise<RefactorAction[]> =>
+      ipcRenderer.invoke('intelligence:refactorActions', filePath, range),
+
+    applyRefactor: (
+      filePath: string,
+      range: Range,
+      actionKind: string
+    ): Promise<WorkspaceEdit | null> =>
+      ipcRenderer.invoke('intelligence:applyRefactor', filePath, range, actionKind),
+
+    // ============ 文件同步 ============
+    syncFile: (filePath: string, content: string, version: number): void =>
+      ipcRenderer.send('intelligence:syncFile', filePath, content, version),
+
+    closeFile: (filePath: string): void =>
+      ipcRenderer.send('intelligence:closeFile', filePath),
+
+    // ============ 项目管理 ============
+    openProject: (rootPath: string): Promise<void> =>
+      ipcRenderer.invoke('intelligence:openProject', rootPath),
+
+    closeProject: (rootPath: string): Promise<void> =>
+      ipcRenderer.invoke('intelligence:closeProject', rootPath),
+
+    // ============ 语言服务器状态 ============
+    getServerStatus: (language: string): Promise<LanguageServerStatus> =>
+      ipcRenderer.invoke('intelligence:serverStatus', language),
+
+    onServerStatusChange: (callback: (status: LanguageServerStatus) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, status: LanguageServerStatus) =>
+        callback(status)
+      ipcRenderer.on('intelligence:serverStatusChange', handler)
+      return () => ipcRenderer.removeListener('intelligence:serverStatusChange', handler)
+    },
+
+    // ============ 索引进度 ============
+    onIndexingProgress: (callback: (progress: IndexingProgress) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, progress: IndexingProgress) =>
+        callback(progress)
+      ipcRenderer.on('intelligence:indexingProgress', handler)
+      return () => ipcRenderer.removeListener('intelligence:indexingProgress', handler)
+    },
+
+    // ============ 分析状态 ============
+    onAnalysisStatus: (callback: (status: AnalysisStatus) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, status: AnalysisStatus) =>
+        callback(status)
+      ipcRenderer.on('intelligence:analysisStatus', handler)
+      return () => ipcRenderer.removeListener('intelligence:analysisStatus', handler)
+    },
+
+    // ============ 服务状态 ============
+    getServiceStatus: (): Promise<LogosServiceStatus> =>
+      ipcRenderer.invoke('intelligence:serviceStatus'),
+
+    onServiceStatusChange: (callback: (status: LogosServiceStatus) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, status: LogosServiceStatus) =>
+        callback(status)
+      ipcRenderer.on('intelligence:serviceStatusChange', handler)
+      return () => ipcRenderer.removeListener('intelligence:serviceStatusChange', handler)
+    },
+
+    // ============ LSP 诊断 ============
+    onDiagnostics: (callback: (params: { filePath: string; diagnostics: Diagnostic[] }) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, params: { filePath: string; diagnostics: Diagnostic[] }) =>
+        callback(params)
+      ipcRenderer.on('lsp:diagnostics', handler)
+      return () => ipcRenderer.removeListener('lsp:diagnostics', handler)
+    },
+
+    // ============ LSP 服务器状态 ============
+    onLSPServerStatus: (callback: (event: { languageId: string; status: string; message?: string }) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, event: { languageId: string; status: string; message?: string }) =>
+        callback(event)
+      ipcRenderer.on('lsp:serverStatus', handler)
+      return () => ipcRenderer.removeListener('lsp:serverStatus', handler)
+    }
   }
 })
 
@@ -622,6 +925,78 @@ declare global {
         cancelPipeline: (repoPath: string, baseUrl: string, pipelineId: number, token?: string) => Promise<any>
         retryPipeline: (repoPath: string, baseUrl: string, pipelineId: number, token?: string) => Promise<any>
         getJobLog: (repoPath: string, baseUrl: string, jobId: number, token?: string) => Promise<string>
+      }
+
+      // 代码智能
+      intelligence: {
+        // 补全
+        getCompletions: (
+          filePath: string,
+          position: Position,
+          triggerCharacter?: string
+        ) => Promise<CompletionResult>
+
+        // 定义跳转
+        getDefinitions: (filePath: string, position: Position) => Promise<DefinitionLocation[]>
+
+        // 查找引用
+        getReferences: (
+          filePath: string,
+          position: Position,
+          includeDeclaration?: boolean
+        ) => Promise<ReferenceLocation[]>
+
+        // 诊断信息
+        getDiagnostics: (filePath: string) => Promise<Diagnostic[]>
+
+        // 悬停信息
+        getHover: (filePath: string, position: Position) => Promise<HoverInfo | null>
+
+        // 签名帮助
+        getSignatureHelp: (
+          filePath: string,
+          position: Position,
+          triggerCharacter?: string
+        ) => Promise<SignatureHelp | null>
+
+        // 内联提示
+        getInlayHints: (filePath: string, range: Range) => Promise<InlayHint[]>
+
+        // 重命名
+        prepareRename: (filePath: string, position: Position) => Promise<PrepareRenameResult | null>
+        rename: (filePath: string, position: Position, newName: string) => Promise<WorkspaceEdit | null>
+
+        // 重构
+        getRefactorActions: (filePath: string, range: Range) => Promise<RefactorAction[]>
+        applyRefactor: (filePath: string, range: Range, actionKind: string) => Promise<WorkspaceEdit | null>
+
+        // 文件同步
+        syncFile: (filePath: string, content: string, version: number) => void
+        closeFile: (filePath: string) => void
+
+        // 项目管理
+        openProject: (rootPath: string) => Promise<void>
+        closeProject: (rootPath: string) => Promise<void>
+
+        // 语言服务器状态
+        getServerStatus: (language: string) => Promise<LanguageServerStatus>
+        onServerStatusChange: (callback: (status: LanguageServerStatus) => void) => () => void
+
+        // 索引进度
+        onIndexingProgress: (callback: (progress: IndexingProgress) => void) => () => void
+
+        // 分析状态
+        onAnalysisStatus: (callback: (status: AnalysisStatus) => void) => () => void
+
+        // 服务状态
+        getServiceStatus: () => Promise<LogosServiceStatus>
+        onServiceStatusChange: (callback: (status: LogosServiceStatus) => void) => () => void
+
+        // LSP 诊断
+        onDiagnostics: (callback: (params: { filePath: string; diagnostics: Diagnostic[] }) => void) => () => void
+
+        // LSP 服务器状态
+        onLSPServerStatus: (callback: (event: { languageId: string; status: string; message?: string }) => void) => () => void
       }
     }
   }
