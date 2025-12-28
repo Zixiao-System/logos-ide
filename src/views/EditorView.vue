@@ -8,7 +8,7 @@ import { ref, watch, onMounted, onUnmounted, computed, nextTick } from 'vue'
 import * as monaco from 'monaco-editor'
 import { useEditorStore } from '@/stores/editor'
 import { useFileExplorerStore } from '@/stores/fileExplorer'
-import { getIntelligenceManager, destroyIntelligenceManager } from '@/logos'
+import { getIntelligenceManager, destroyIntelligenceManager } from '@/services/lsp'
 
 // 导入 MDUI 图标
 import '@mdui/icons/chevron-right.js'
@@ -60,7 +60,7 @@ function initEditor() {
   if (!editorContainer.value || editor) return
 
   // 定义主题
-  monaco.editor.defineTheme('logos-dark', {
+  monaco.editor.defineTheme('lsp-dark', {
     base: 'vs-dark',
     inherit: true,
     rules: [],

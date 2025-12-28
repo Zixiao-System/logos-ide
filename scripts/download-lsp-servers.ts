@@ -219,7 +219,7 @@ async function downloadRustAnalyzer(): Promise<void> {
   try {
     const response = await new Promise<string>((resolve, reject) => {
       https.get(latestUrl, {
-        headers: { 'User-Agent': 'logos-ide' }
+        headers: { 'User-Agent': 'lsp-ide' }
       }, (res) => {
         let data = ''
         res.on('data', chunk => data += chunk)

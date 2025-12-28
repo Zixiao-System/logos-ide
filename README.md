@@ -70,13 +70,13 @@ Logos IDE is a modern, lightweight code editor built with Electron and Vue 3. It
 
 ```bash
 # macOS (Homebrew)
-brew install --cask logos-ide
+brew install --cask lsp-ide
 
 # Windows (Winget)
 winget install Zixiao.LogosIDE
 
 # Linux (Snap)
-snap install logos-ide
+snap install lsp-ide
 ```
 
 ## Screenshots
@@ -102,7 +102,7 @@ snap install logos-ide
 ```bash
 # Clone the repository
 git clone https://github.com/Zixiao-System/logos-ide.git
-cd logos-ide
+cd lsp-ide
 
 # Install dependencies
 npm install
@@ -200,7 +200,7 @@ Logos IDE stores configuration in:
   "editor.tabSize": 2,
   "editor.wordWrap": "off",
   "editor.minimap": true,
-  "editor.theme": "logos-dark"
+  "editor.theme": "lsp-dark"
 }
 ```
 

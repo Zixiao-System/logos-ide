@@ -39,7 +39,7 @@ function initDiffEditor() {
   // 使用与主编辑器相同的主题
   diffEditor = monaco.editor.createDiffEditor(diffContainer.value, {
     ...diffEditorOptions.value,
-    theme: 'logos-dark'
+    theme: 'lsp-dark'
   })
 
   // 设置差异内容

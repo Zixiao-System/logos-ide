@@ -8,7 +8,7 @@ import type { AppSettings, EditorSettings, DevOpsSettings, CICDProvider } from '
 import { DEFAULT_APP_SETTINGS, DEFAULT_EDITOR_SETTINGS, DEFAULT_DEVOPS_SETTINGS } from '@/types/settings'
 
 // localStorage 键名
-const SETTINGS_STORAGE_KEY = 'logos-ide-settings'
+const SETTINGS_STORAGE_KEY = 'lsp-ide-settings'
 
 interface SettingsState extends AppSettings {
   /** 设置是否已初始化 */

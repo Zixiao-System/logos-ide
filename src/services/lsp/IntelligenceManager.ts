@@ -4,15 +4,15 @@
  */
 
 import * as monaco from 'monaco-editor'
-import { CompletionProvider } from './providers/CompletionProvider'
-import { DefinitionProvider } from './providers/DefinitionProvider'
-import { ReferenceProvider } from './providers/ReferenceProvider'
-import { HoverProvider } from './providers/HoverProvider'
-import { SignatureHelpProvider } from './providers/SignatureHelpProvider'
-import { RenameProvider } from './providers/RenameProvider'
-import { InlayHintsProvider } from './providers/InlayHintsProvider'
-import { DiagnosticsManager } from './DiagnosticsManager'
-import type { LanguageServerStatus } from '@/types/intelligence'
+import { CompletionProvider } from './providers/CompletionProvider.ts'
+import { DefinitionProvider } from './providers/DefinitionProvider.ts'
+import { ReferenceProvider } from './providers/ReferenceProvider.ts'
+import { HoverProvider } from './providers/HoverProvider.ts'
+import { SignatureHelpProvider } from './providers/SignatureHelpProvider.ts'
+import { RenameProvider } from './providers/RenameProvider.ts'
+import { InlayHintsProvider } from './providers/InlayHintsProvider.ts'
+import { DiagnosticsManager } from './DiagnosticsManager.ts'
+import type { LanguageServerStatus } from '@/types/intelligence.ts'
 
 /** 支持的 Tier 1 语言 (TypeScript Language Service) */
 const TIER1_LANGUAGES = [

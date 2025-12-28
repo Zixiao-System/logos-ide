@@ -20,8 +20,8 @@ const themeStore = useThemeStore()
 
 // 主题选项
 const themeOptions = [
-  { label: 'Logos Dark', value: 'logos-dark' },
-  { label: 'Logos Light', value: 'logos-light' },
+  { label: 'Logos Dark', value: 'lsp-dark' },
+  { label: 'Logos Light', value: 'lsp-light' },
   { label: 'Monokai', value: 'monokai' },
   { label: 'GitHub Dark', value: 'github-dark' }
 ]
@@ -68,7 +68,7 @@ const autoSave = computed({
 const colorTheme = computed({
   get: () => settingsStore.editor.colorTheme,
   set: (value: string) => settingsStore.updateEditor({
-    colorTheme: value as 'logos-dark' | 'logos-light' | 'monokai' | 'github-dark'
+    colorTheme: value as 'lsp-dark' | 'lsp-light' | 'monokai' | 'github-dark'
   })
 })
 

@@ -101,7 +101,7 @@ function getJdtlsConfig(workspacePath: string): LSPServerConfig {
     : path.join(__dirname, '../../../../resources/bin', `${process.platform}-${process.arch}`, 'jdtls')
 
   const configPath = path.join(jdtlsPath, `config_${process.platform}`)
-  const dataPath = path.join(os.tmpdir(), 'logos-jdtls-data', path.basename(workspacePath))
+  const dataPath = path.join(os.tmpdir(), 'lsp-jdtls-data', path.basename(workspacePath))
 
   return {
     languageId: 'java',

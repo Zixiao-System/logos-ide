@@ -17,7 +17,7 @@ export interface EditorSettings {
   /** 是否自动保存 */
   autoSave: boolean
   /** 颜色主题 */
-  colorTheme: 'logos-dark' | 'logos-light' | 'monokai' | 'github-dark'
+  colorTheme: 'lsp-dark' | 'lsp-light' | 'monokai' | 'github-dark'
 }
 
 /** CI/CD 提供者类型 */
@@ -52,7 +52,7 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
   wordWrap: true,
   minimap: true,
   autoSave: true,
-  colorTheme: 'logos-dark'
+  colorTheme: 'lsp-dark'
 }
 
 /** 默认 DevOps 设置 */
@@ -79,6 +79,6 @@ export function toEditorConfig(settings: EditorSettings): Partial<EditorConfig> 
     tabSize: settings.tabSize,
     wordWrap: settings.wordWrap ? 'on' : 'off',
     minimap: settings.minimap,
-    theme: settings.colorTheme === 'logos-light' ? 'logos-light' : 'logos-dark'
+    theme: settings.colorTheme === 'lsp-light' ? 'lsp-light' : 'lsp-dark'
   }
 }

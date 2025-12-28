@@ -133,7 +133,7 @@ logos-ide/
 
 ```json
 {
-  "name": "logos-ide",
+  "name": "lsp-ide",
   "version": "0.1.0",
   "description": "Logos IDE - A modern, lightweight code editor built with Electron and Vue 3",
   "repository": {
@@ -229,7 +229,7 @@ git submodule add https://github.com/Zixiao-System/logos-ide.git ide
 ```json
 {
   "dependencies": {
-    "logos-ide": "github:Zixiao-System/logos-ide"
+    "logos-ide": "github:Zixiao-System/lsp-ide"
   }
 }
 ```

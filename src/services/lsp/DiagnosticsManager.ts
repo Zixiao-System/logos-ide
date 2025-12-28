@@ -4,7 +4,7 @@
  */
 
 import * as monaco from 'monaco-editor'
-import type { Diagnostic } from '@/types/intelligence'
+import type { Diagnostic } from '@/types/intelligence.ts'
 
 export class DiagnosticsManager {
   private markers: Map<string, monaco.editor.IMarkerData[]> = new Map()

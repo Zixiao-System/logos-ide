@@ -53,7 +53,7 @@ export interface EditorConfig {
   /** 是否自动换行 */
   wordWrap: 'on' | 'off' | 'wordWrapColumn' | 'bounded'
   /** 主题 */
-  theme: 'logos-dark' | 'logos-light'
+  theme: 'lsp-dark' | 'lsp-light'
   /** 是否显示行号 */
   lineNumbers: 'on' | 'off' | 'relative'
   /** 是否启用连字 */
@@ -80,7 +80,7 @@ export const DEFAULT_EDITOR_CONFIG: EditorConfig = {
   insertSpaces: true,
   minimap: true,
   wordWrap: 'on',
-  theme: 'logos-dark',
+  theme: 'lsp-dark',
   lineNumbers: 'on',
   fontLigatures: true
 }

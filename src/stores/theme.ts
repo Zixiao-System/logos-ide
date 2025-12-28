@@ -9,7 +9,7 @@ import { defineStore } from 'pinia'
 type ThemeMode = 'light' | 'dark' | 'auto'
 
 // localStorage 键名
-const THEME_STORAGE_KEY = 'logos-ide-theme'
+const THEME_STORAGE_KEY = 'lsp-ide-theme'
 
 interface ThemeState {
   /** 当前主题设置 */
