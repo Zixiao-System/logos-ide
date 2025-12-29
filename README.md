@@ -10,6 +10,7 @@
 [![Electron](https://img.shields.io/badge/electron-29+-47848F.svg)](https://electronjs.org)
 [![Vue](https://img.shields.io/badge/vue-3.4+-4FC08D.svg)](https://vuejs.org)
 [![TypeScript](https://img.shields.io/badge/typescript-5.4+-3178C6.svg)](https://typescriptlang.org)
+[![Check & Build](https://github.com/Zixiao-System/logos/actions/workflows/Check.yml/badge.svg)](https://github.com/Zixiao-System/logos/actions/workflows/Check.yml)
 
 [Download](#download) | [Features](#features) | [Development](#development) | [Documentation](#documentation)
 
