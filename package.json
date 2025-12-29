@@ -1,7 +1,7 @@
 {
   "name": "logos",
   "version": "0.1.1",
-  "description": "logos - PRTS DevOps Platform",
+  "description": "logos - Light and Smart Code Editor",
   "author": "Zixiao System",
   "license": "MIT",
   "main": "dist-electron/main.js",
