@@ -53,7 +53,7 @@ jobs:
         run: npm ci
 
       - name: Install LSP Server
-        run: npm run download:lsp
+        run: npm run download:lsp -- --pyright
 
       - name: Build (vite + electron-builder)
         env:
