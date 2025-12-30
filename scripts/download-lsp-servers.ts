@@ -213,7 +213,13 @@ async function downloadRustAnalyzer(): Promise<void> {
   const ext = PLATFORM === 'win32' ? '.exe' : ''
   const fileName = `rust-analyzer-${target}${ext}`
 
-  // 获取最新版本
+  // 获取最新版本，若已存在rust-analyzer则跳过下载
+    if (fs.existsSync(path.join(BIN_DIR, PLATFORM === 'win32' ? 'rust-analyzer.exe' : 'rust-analyzer'))) {
+      console.log('rust-analyzer already exists, skipping download')
+        console.log('rust-analyzer installed successfully')
+
+      return
+    }
   const latestUrl = 'https://api.github.com/repos/rust-lang/rust-analyzer/releases/latest'
 
   try {
@@ -276,7 +282,23 @@ async function downloadJdtls(): Promise<void> {
   const version = '1.43.0'
   const timestamp = '202412191447'
 
-  // jdtls 是 Java 应用，跨平台通用
+  // jdtls 是 Java 应用，跨平台通用,所以不区分平台和架构,  已存在则跳过下载
+    if (fs.existsSync(path.join(BIN_DIR, 'jdtls'))) {
+      console.log('jdtls already exists, skipping download')
+        console.log('jdtls installed successfully')
+        //设置可执行权限
+        if (PLATFORM !== 'win32') {
+          const binDir = path.join(BIN_DIR, 'jdtls', 'bin')
+          if (fs.existsSync(binDir)) {
+            const files = fs.readdirSync(binDir)
+            for (const file of files) {
+              const filePath = path.join(binDir, file)
+              fs.chmodSync(filePath, '755')
+            }
+          }
+        }
+      return
+    }
   const fileName = `jdt-language-server-${version}-${timestamp}.tar.gz`
   const downloadUrl = `https://download.eclipse.org/jdtls/milestones/${version}/${fileName}`
 

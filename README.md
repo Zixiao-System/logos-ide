@@ -2,7 +2,7 @@
 
 # Logos
 
-<img src="docs/assets/logo.png" alt="logos Logo" width="128" height="128">
+<img src="docs/assets/Icon-iOS-Default-1024x1024@1x.png" alt="logos Logo" width="128" height="128">
 
 **A Modern, Lightweight Code Editor**
 
@@ -20,7 +20,7 @@
 
 ## About
 
-logos is a modern, lightweight code editor built with Electron and Vue 3. It features Monaco Editor integration, an integrated terminal, and a beautiful Material Design-inspired UI powered by MDUI.
+Logos is a modern, lightweight code editor built with Electron and Vue 3. It features Monaco Editor integration, an integrated terminal, and a beautiful Material Design-inspired UI powered by MDUI.
 
 > *The name "Logos" comes from an elite operator in the game "Arknights" (Logos), symbolizing wisdom and insight.*
 
