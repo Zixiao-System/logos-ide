@@ -23,10 +23,6 @@ ide/dist-electron/
 ide/.vite/
 ide/*.local
 
-# Logos Analyzer (Rust)
-ide/logos-analyzer/target/
-ide/logos-analyzer/pkg/
-ide/logos-analyzer/Cargo.lock
 
 # Logos Lang (Rust WASM)
 logos-lang/target/
@@ -41,7 +37,7 @@ __pycache__/
 *$py.class
 *.so
 .Python
-build/
+
 develop-eggs/
 dist/
 downloads/
