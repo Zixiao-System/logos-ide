@@ -77,8 +77,27 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
 
-      - name: Setup Emscripten
-        uses: mymindstorm/setup-emsdk@v14
+      - name: Install WASI SDK
+        run: |
+          curl -LO https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-24/wasi-sdk-24.0-x86_64-linux.tar.gz
+          tar xzf wasi-sdk-24.0-x86_64-linux.tar.gz
+          echo "WASI_SDK_PATH=$PWD/wasi-sdk-24.0-x86_64-linux" >> $GITHUB_ENV
+        if: runner.os == 'Linux'
+
+      - name: Install WASI SDK (macOS)
+        run: |
+          curl -LO https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-24/wasi-sdk-24.0-arm64-macos.tar.gz
+          tar xzf wasi-sdk-24.0-arm64-macos.tar.gz
+          echo "WASI_SDK_PATH=$PWD/wasi-sdk-24.0-arm64-macos" >> $GITHUB_ENV
+        if: runner.os == 'macOS'
+
+      - name: Install WASI SDK (Windows)
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-24/wasi-sdk-24.0-x86_64-windows.tar.gz" -OutFile "wasi-sdk.tar.gz"
+          tar xzf wasi-sdk.tar.gz
+          echo "WASI_SDK_PATH=$PWD/wasi-sdk-24.0-x86_64-windows" >> $env:GITHUB_ENV
+        if: runner.os == 'Windows'
 
       - name: Install wasm-pack
         run: cargo install wasm-pack --locked
@@ -97,11 +116,11 @@ jobs:
 
       - name: Build WASM
         working-directory: logos-lang
-        env:
-          CC: emcc
-          CXX: em++
         run: |
+          export CC_wasm32_unknown_unknown="${WASI_SDK_PATH}/bin/clang"
+          export CFLAGS_wasm32_unknown_unknown="--sysroot=${WASI_SDK_PATH}/share/wasi-sysroot -fno-exceptions"
           wasm-pack build crates/logos-wasm --target web --release --out-dir ../../pkg --out-name logos-lang
+        shell: bash
 
       - name: Install dependencies
         run: npm ci --include=dev
