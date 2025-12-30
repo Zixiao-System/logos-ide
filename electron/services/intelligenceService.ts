@@ -1,14 +1,57 @@
 /**
  * 代码智能服务
  * 使用 TypeScript Compiler API 提供原生智能功能
- * 使用 LSP 提供其他语言支持 (Python/Go/Rust/Java)
+ * 其他语言支持将通过 Rust-WASM 实现 (TODO)
  */
 
 import { ipcMain, BrowserWindow } from 'electron'
 import * as ts from 'typescript'
 import * as path from 'path'
 import * as fs from 'fs'
-import { lspClientManager, LANGUAGE_MAP, EXTENSION_TO_LANGUAGE, type LanguageTier } from './lsp'
+
+// ============ 语言配置 ============
+
+type LanguageTier = 'native' | 'wasm' | 'basic'
+
+interface LanguageInfo {
+  tier: LanguageTier
+  displayName: string
+  extensions: string[]
+}
+
+// 语言映射表
+const LANGUAGE_MAP: Record<string, LanguageInfo> = {
+  typescript: { tier: 'native', displayName: 'TypeScript', extensions: ['.ts', '.tsx'] },
+  javascript: { tier: 'native', displayName: 'JavaScript', extensions: ['.js', '.jsx'] },
+  typescriptreact: { tier: 'native', displayName: 'TypeScript React', extensions: ['.tsx'] },
+  javascriptreact: { tier: 'native', displayName: 'JavaScript React', extensions: ['.jsx'] },
+  // 以下语言将通过 Rust-WASM 支持 (TODO)
+  python: { tier: 'wasm', displayName: 'Python', extensions: ['.py'] },
+  go: { tier: 'wasm', displayName: 'Go', extensions: ['.go'] },
+  rust: { tier: 'wasm', displayName: 'Rust', extensions: ['.rs'] },
+  c: { tier: 'wasm', displayName: 'C', extensions: ['.c', '.h'] },
+  cpp: { tier: 'wasm', displayName: 'C++', extensions: ['.cpp', '.cc', '.cxx', '.hpp', '.hxx'] },
+  java: { tier: 'wasm', displayName: 'Java', extensions: ['.java'] },
+}
+
+// 扩展名到语言 ID 的映射
+const EXTENSION_TO_LANGUAGE: Record<string, string> = {
+  '.ts': 'typescript',
+  '.tsx': 'typescriptreact',
+  '.js': 'javascript',
+  '.jsx': 'javascriptreact',
+  '.py': 'python',
+  '.go': 'go',
+  '.rs': 'rust',
+  '.c': 'c',
+  '.h': 'c',
+  '.cpp': 'cpp',
+  '.cc': 'cpp',
+  '.cxx': 'cpp',
+  '.hpp': 'cpp',
+  '.hxx': 'cpp',
+  '.java': 'java',
+}
 
 // ============ 类型定义 ============
 
@@ -871,11 +914,6 @@ function isNativeLanguage(filePath: string): boolean {
   return getLanguageTier(languageId) === 'native'
 }
 
-function isLSPLanguage(filePath: string): boolean {
-  const languageId = detectLanguage(filePath)
-  return getLanguageTier(languageId) === 'lsp'
-}
-
 // ============ 服务管理器 ============
 
 class IntelligenceServiceManager {
@@ -891,11 +929,10 @@ class IntelligenceServiceManager {
 
   setMainWindow(getMainWindow: () => BrowserWindow | null): void {
     this.mainWindow = getMainWindow
-    lspClientManager.setMainWindow(getMainWindow)
   }
 
   async openProject(rootPath: string): Promise<void> {
-    // 1. 启动 TypeScript 原生服务
+    // 启动 TypeScript 原生服务
     if (!this.services.has(rootPath)) {
       const service = new TypeScriptLanguageService(rootPath, (progress) => {
         this.currentProgress = progress
@@ -910,9 +947,7 @@ class IntelligenceServiceManager {
         message: `TypeScript service ready`
       })
     }
-
-    // 2. 启动 LSP 服务（自动检测项目中需要的语言）
-    await lspClientManager.openProject(rootPath)
+    // TODO: Rust-WASM 语言服务将在这里初始化
   }
 
   private notifyIndexingProgress(progress: IndexingProgress): void {
@@ -925,18 +960,12 @@ class IntelligenceServiceManager {
   }
 
   getServiceStatus(): LSPServiceStatus {
-    // 获取 LSP 服务器状态
-    const lspStatuses = lspClientManager.getServerStatuses()
     const servers: LanguageServerStatus[] = [
       {
         language: 'typescript',
         status: this.services.size > 0 ? 'ready' : 'stopped'
-      },
-      ...lspStatuses.map(s => ({
-        language: s.languageId,
-        status: s.status as 'starting' | 'ready' | 'error' | 'stopped',
-        message: s.message
-      }))
+      }
+      // TODO: Rust-WASM 语言服务状态
     ]
 
     return {
@@ -961,9 +990,7 @@ class IntelligenceServiceManager {
       service.dispose()
       this.services.delete(rootPath)
     }
-
-    // 关闭 LSP 服务
-    await lspClientManager.closeProject()
+    // TODO: 关闭 Rust-WASM 服务
   }
 
   getServiceForFile(filePath: string): TypeScriptLanguageService | null {
@@ -1010,9 +1037,8 @@ export function registerIntelligenceHandlers(getMainWindow: () => BrowserWindow 
       if (service) {
         service.syncFile(filePath, content, version)
       }
-    } else if (isLSPLanguage(filePath)) {
-      lspClientManager.syncFile(filePath, content)
     }
+    // TODO: Rust-WASM 语言服务文件同步
   })
 
   ipcMain.on('intelligence:closeFile', (_, filePath: string) => {
@@ -1021,16 +1047,13 @@ export function registerIntelligenceHandlers(getMainWindow: () => BrowserWindow 
       if (service) {
         service.closeFile(filePath)
       }
-    } else if (isLSPLanguage(filePath)) {
-      lspClientManager.closeFile(filePath)
     }
+    // TODO: Rust-WASM 语言服务文件关闭
   })
 
-  // 文件打开（LSP 专用）
-  ipcMain.on('intelligence:openFile', (_, filePath: string, content: string) => {
-    if (isLSPLanguage(filePath)) {
-      lspClientManager.openFile(filePath, content)
-    }
+  // 文件打开
+  ipcMain.on('intelligence:openFile', (_, _filePath: string, _content: string) => {
+    // TODO: Rust-WASM 语言服务文件打开
   })
 
   // 补全
@@ -1039,9 +1062,8 @@ export function registerIntelligenceHandlers(getMainWindow: () => BrowserWindow 
       const service = serviceManager.getServiceForFile(filePath)
       if (!service) return { suggestions: [] }
       return service.getCompletions(filePath, position, triggerCharacter)
-    } else if (isLSPLanguage(filePath)) {
-      return lspClientManager.getCompletions(filePath, position)
     }
+    // TODO: Rust-WASM 语言服务补全
     return { suggestions: [] }
   })
 
@@ -1051,9 +1073,8 @@ export function registerIntelligenceHandlers(getMainWindow: () => BrowserWindow 
       const service = serviceManager.getServiceForFile(filePath)
       if (!service) return []
       return service.getDefinitions(filePath, position)
-    } else if (isLSPLanguage(filePath)) {
-      return lspClientManager.getDefinitions(filePath, position)
     }
+    // TODO: Rust-WASM 语言服务定义跳转
     return []
   })
 
@@ -1063,9 +1084,8 @@ export function registerIntelligenceHandlers(getMainWindow: () => BrowserWindow 
       const service = serviceManager.getServiceForFile(filePath)
       if (!service) return []
       return service.getReferences(filePath, position, includeDeclaration)
-    } else if (isLSPLanguage(filePath)) {
-      return lspClientManager.getReferences(filePath, position, includeDeclaration)
     }
+    // TODO: Rust-WASM 语言服务查找引用
     return []
   })
 
@@ -1075,9 +1095,8 @@ export function registerIntelligenceHandlers(getMainWindow: () => BrowserWindow 
       const service = serviceManager.getServiceForFile(filePath)
       if (!service) return []
       return service.getDiagnostics(filePath)
-    } else if (isLSPLanguage(filePath)) {
-      return lspClientManager.getDiagnostics(filePath)
     }
+    // TODO: Rust-WASM 语言服务诊断
     return []
   })
 
@@ -1087,9 +1106,8 @@ export function registerIntelligenceHandlers(getMainWindow: () => BrowserWindow 
       const service = serviceManager.getServiceForFile(filePath)
       if (!service) return null
       return service.getHover(filePath, position)
-    } else if (isLSPLanguage(filePath)) {
-      return lspClientManager.getHover(filePath, position)
     }
+    // TODO: Rust-WASM 语言服务悬停信息
     return null
   })
 
@@ -1132,9 +1150,8 @@ export function registerIntelligenceHandlers(getMainWindow: () => BrowserWindow 
       const service = serviceManager.getServiceForFile(filePath)
       if (!service) return null
       return service.rename(filePath, position, newName)
-    } else if (isLSPLanguage(filePath)) {
-      return lspClientManager.rename(filePath, position, newName)
     }
+    // TODO: Rust-WASM 语言服务重命名
     return null
   })
 
@@ -1171,14 +1188,13 @@ export function registerIntelligenceHandlers(getMainWindow: () => BrowserWindow 
       }
     }
 
-    // LSP 支持的语言
+    // WASM 支持的语言 (TODO)
     const langInfo = LANGUAGE_MAP[language]
-    if (langInfo?.tier === 'lsp') {
-      const isReady = lspClientManager.isServerReady(language)
+    if (langInfo?.tier === 'wasm') {
       return {
         language,
-        status: isReady ? 'ready' as const : 'stopped' as const,
-        message: isReady ? `${langInfo.displayName} LSP is ready` : `${langInfo.displayName} LSP not started`
+        status: 'stopped' as const,
+        message: `${langInfo.displayName} support coming soon (Rust-WASM)`
       }
     }
 

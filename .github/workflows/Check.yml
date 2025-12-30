@@ -27,12 +27,35 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+  rust-check:
+    name: Rust Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
+      - name: Setup Rust
+        uses: dtolnay/rust-action@stable
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            logos-lang/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('logos-lang/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Check Rust
+        working-directory: logos-lang
+        run: cargo check --all-targets
 
   build:
     name: Build & Package
-    needs: checks
-    # only run builds on push to main or when manually triggered
+    needs: [checks, rust-check]
     if: github.event_name != 'pull_request'
     strategy:
       matrix:
@@ -49,14 +72,31 @@ jobs:
           node-version: '18'
           cache: 'npm'
 
+      - name: Setup Rust
+        uses: dtolnay/rust-action@stable
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --locked
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            logos-lang/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('logos-lang/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Build WASM
+        working-directory: logos-lang
+        run: |
+          wasm-pack build crates/logos-wasm --target web --release --out-dir ../../pkg --out-name logos-lang
+
       - name: Install dependencies
         run: npm ci --include=dev
-
-      - name: Build download script
-        run: npm run build:scripts
-
-      - name: Install LSP Server
-        run: node --enable-source-maps --experimental-specifier-resolution=node dist-scripts/download-lsp-servers.mjs --pyright
 
       - name: Build (vite + electron-builder)
         env:

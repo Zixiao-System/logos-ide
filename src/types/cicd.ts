@@ -1,7 +1,7 @@
 /**
  * CI/CD 相关类型定义
  * 支持 GitHub Actions 和 GitLab CI
- * TODO: 未来可扩展支持更多 CI/CD 平台, 如 Jenkins、CircleCI 等，以及正在研发中的本地 CI/CD 功能和Priestess CI/CD 云服务
+ * TODO: 未来可扩展支持更多 CI/CD 平台, 如 Jenkins、CircleCI 等，以及正在研发中的本地 CI/CD 功能和Muelsyse CI/CD 云服务
  */
 
 /** CI/CD 平台类型 */

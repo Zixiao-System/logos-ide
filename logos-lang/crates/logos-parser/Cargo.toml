@@ -1,0 +1,33 @@
+[package]
+name = "logos-parser"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Tree-sitter based parser for Logos language service"
+
+[dependencies]
+logos-core.workspace = true
+tree-sitter.workspace = true
+thiserror.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tree-sitter-python.workspace = true
+tree-sitter-go.workspace = true
+tree-sitter-rust.workspace = true
+tree-sitter-c.workspace = true
+tree-sitter-cpp.workspace = true
+tree-sitter-java.workspace = true
+tree-sitter-javascript.workspace = true
+tree-sitter-typescript.workspace = true
+
+[features]
+default = ["python", "go", "rust", "c", "cpp", "java", "javascript", "typescript"]
+python = []
+go = []
+rust = []
+c = []
+cpp = []
+java = []
+javascript = []
+typescript = []

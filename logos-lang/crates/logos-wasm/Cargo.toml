@@ -1,0 +1,24 @@
+[package]
+name = "logos-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "WASM bindings for Logos language service"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+logos-core.workspace = true
+logos-parser.workspace = true
+logos-semantic.workspace = true
+logos-index.workspace = true
+wasm-bindgen.workspace = true
+js-sys.workspace = true
+web-sys.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[features]
+default = []

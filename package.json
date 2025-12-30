@@ -16,13 +16,7 @@
     "electron:build": "npm run build",
     "typecheck": "vue-tsc --noEmit",
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx --fix",
-    "postinstall": "electron-rebuild -f -w node-pty",
-    "build:scripts": "esbuild scripts/download-lsp-servers.ts --bundle --platform=node --target=node18 --outfile=dist-scripts/download-lsp-servers.mjs --format=esm",
-    "download:lsp": "npx ts-node --esm --prefer-ts-exts scripts/download-lsp-servers.ts",
-    "download:lsp:pyright": "npx ts-node --esm --prefer-ts-exts scripts/download-lsp-servers.ts --pyright",
-    "download:lsp:gopls": "npx ts-node --esm --prefer-ts-exts scripts/download-lsp-servers.ts --gopls",
-    "download:lsp:rust-analyzer": "npx ts-node --esm --prefer-ts-exts scripts/download-lsp-servers.ts --rust-analyzer",
-    "download:lsp:jdtls": "npx ts-node --esm --prefer-ts-exts scripts/download-lsp-servers.ts --jdtls"
+    "postinstall": "electron-rebuild -f -w node-pty"
   },
   "keywords": [
     "ide",
@@ -40,9 +34,6 @@
     "monaco-editor": "^0.47.0",
     "node-pty": "^1.0.0",
     "pinia": "^2.1.7",
-    "vscode-jsonrpc": "^8.2.1",
-    "vscode-languageserver-protocol": "^3.17.5",
-    "vscode-uri": "^3.1.0",
     "vue": "^3.4.21",
     "vue-router": "^4.3.0"
   },
@@ -79,15 +70,6 @@
     "files": [
       "dist/**/*",
       "dist-electron/**/*"
-    ],
-    "extraResources": [
-      {
-        "from": "resources/bin/${os}-${arch}",
-        "to": "bin",
-        "filter": [
-          "**/*"
-        ]
-      }
     ],
     "mac": {
       "category": "public.app-category.developer-tools",

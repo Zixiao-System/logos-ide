@@ -28,6 +28,12 @@ ide/logos-analyzer/target/
 ide/logos-analyzer/pkg/
 ide/logos-analyzer/Cargo.lock
 
+# Logos Lang (Rust WASM)
+logos-lang/target/
+logos-lang/pkg/
+logos-lang/Cargo.lock
+logos-lang/crates/*/target/
+
 
 # Python
 __pycache__/
