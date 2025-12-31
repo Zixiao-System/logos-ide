@@ -97,6 +97,10 @@ const buildNotifications = computed({
   get: () => settingsStore.devops.buildNotifications,
   set: (value: boolean) => settingsStore.updateDevOps({ buildNotifications: value })
 })
+
+// 从 package.json 动态读取版本号
+import pkg from '../../package.json'
+const appVersion = pkg.version
 </script>
 
 <template>
@@ -285,12 +289,10 @@ const buildNotifications = computed({
       <div class="about-content">
         <div class="about-logo">
           <span class="logo-text">Logos</span>
-          <span class="logo-subtitle">IDE</span>
         </div>
         <div class="about-info">
-          <p>PRTS DevOps Platform</p>
-          <p class="version">版本 0.1.0</p>
-          <p class="copyright">© 2024 Zixiao System</p>
+          <p class="version">版本 {{ appVersion }}</p>
+          <p class="copyright">© 2025～2026 Zixiao System</p>
         </div>
       </div>
     </mdui-card>
