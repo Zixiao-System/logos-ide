@@ -9,6 +9,17 @@ import { useFileExplorerStore } from '@/stores/fileExplorer'
 import '@xterm/xterm/css/xterm.css'
 
 // 导入图标
+// TODO:此处有bug,无法执行命令，需要修复
+//愿我魏无羡，能够一生锄奸扶弱，无愧于心。
+//logos@luogesideMacBook-Pro ~/WebstormProjects/logos-ide ⚡️ claude
+//zsh: command not found: claude
+//logos@luogesideMacBook-Pro ~/WebstormProjects/logos-ide ⚡️ brew
+//zsh: command not found: brew
+//logos@luogesideMacBook-Pro ~/WebstormProjects/logos-ide ⚡️ fastfetch
+//zsh: command not found: fastfetch
+//logos@luogesideMacBook-Pro ~/WebstormProjects/logos-ide ⚡️ 
+
+
 import '@mdui/icons/add.js'
 import '@mdui/icons/close.js'
 import '@mdui/icons/terminal.js'
