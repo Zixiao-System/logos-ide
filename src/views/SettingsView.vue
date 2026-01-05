@@ -98,6 +98,22 @@ const buildNotifications = computed({
   set: (value: boolean) => settingsStore.updateDevOps({ buildNotifications: value })
 })
 
+// 遥测设置
+const telemetryEnabled = computed({
+  get: () => settingsStore.telemetry.enabled,
+  set: (value: boolean) => {
+    settingsStore.updateTelemetry({ enabled: value })
+    // 同步到主进程
+    if (window.electronAPI?.telemetry) {
+      if (value) {
+        window.electronAPI.telemetry.enable()
+      } else {
+        window.electronAPI.telemetry.disable()
+      }
+    }
+  }
+})
+
 // 从 package.json 动态读取版本号
 import pkg from '../../package.json'
 const appVersion = pkg.version
@@ -283,6 +299,24 @@ const appVersion = pkg.version
       </div>
     </mdui-card>
 
+    <!-- 隐私设置 -->
+    <mdui-card variant="outlined" class="settings-section">
+      <h2>隐私</h2>
+
+      <div class="setting-item">
+        <div class="setting-info">
+          <span class="setting-label">发送错误报告</span>
+          <span class="setting-description">帮助我们改进 Logos，发送匿名错误报告</span>
+        </div>
+        <mdui-switch :checked="telemetryEnabled" @change="telemetryEnabled = !telemetryEnabled"></mdui-switch>
+      </div>
+
+      <div class="telemetry-info">
+        <p>我们收集的信息仅包括：应用崩溃和错误信息、系统平台信息、应用版本号。</p>
+        <p>我们不会收集您的代码内容、文件路径或任何个人身份信息。</p>
+      </div>
+    </mdui-card>
+
     <!-- 关于 -->
     <mdui-card variant="outlined" class="settings-section about-section">
       <h2>关于</h2>
@@ -402,5 +436,19 @@ mdui-select {
 
 .about-info .copyright {
   font-size: 0.875rem;
+}
+
+.telemetry-info {
+  background: var(--mdui-color-surface-container);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-top: 8px;
+}
+
+.telemetry-info p {
+  margin: 4px 0;
+  font-size: 0.875rem;
+  color: var(--mdui-color-on-surface-variant);
+  line-height: 1.5;
 }
 </style>

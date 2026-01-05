@@ -45,11 +45,39 @@ const IGNORED_PATTERNS = [
   '.nyc_output',
 ]
 
+/** 允许显示的以点开头的文件/文件夹 */
+const ALLOWED_DOT_FILES = [
+  '.gitignore',
+  '.github',
+  '.gitlab',
+  '.gitlab-ci.yml',
+  '.env.example',
+  '.editorconfig',
+  '.prettierrc',
+  '.prettierrc.json',
+  '.prettierrc.js',
+  '.eslintrc',
+  '.eslintrc.json',
+  '.eslintrc.js',
+  '.npmrc',
+  '.nvmrc',
+  '.dockerignore',
+  '.gitattributes',
+]
+
 /**
  * 检查是否应该忽略该文件/目录
  */
 function shouldIgnore(name: string): boolean {
-  return IGNORED_PATTERNS.includes(name) || name.startsWith('.')
+  // 先检查是否在忽略列表中
+  if (IGNORED_PATTERNS.includes(name)) {
+    return true
+  }
+  // 如果是以点开头的文件，检查是否在允许列表中
+  if (name.startsWith('.')) {
+    return !ALLOWED_DOT_FILES.includes(name)
+  }
+  return false
 }
 
 /**

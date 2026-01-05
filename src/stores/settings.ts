@@ -4,8 +4,8 @@
  */
 
 import { defineStore } from 'pinia'
-import type { AppSettings, EditorSettings, DevOpsSettings, CICDProvider } from '@/types/settings'
-import { DEFAULT_APP_SETTINGS, DEFAULT_EDITOR_SETTINGS, DEFAULT_DEVOPS_SETTINGS } from '@/types/settings'
+import type { AppSettings, EditorSettings, DevOpsSettings, CICDProvider, TelemetrySettings } from '@/types/settings'
+import { DEFAULT_APP_SETTINGS, DEFAULT_EDITOR_SETTINGS, DEFAULT_DEVOPS_SETTINGS, DEFAULT_TELEMETRY_SETTINGS } from '@/types/settings'
 
 // localStorage 键名
 const SETTINGS_STORAGE_KEY = 'lsp-ide-settings'
@@ -47,6 +47,20 @@ export const useSettingsStore = defineStore('settings', {
         return !!state.devops.gitlabToken
       }
       return false
+    },
+
+    /**
+     * 是否需要显示遥测同意对话框 (首次启动)
+     */
+    shouldShowTelemetryConsent: (state): boolean => {
+      return !state.telemetry.hasAsked
+    },
+
+    /**
+     * 遥测是否启用
+     */
+    isTelemetryEnabled: (state): boolean => {
+      return state.telemetry.enabled
     }
   },
 
@@ -70,6 +84,9 @@ export const useSettingsStore = defineStore('settings', {
           if (parsed.devops) {
             this.devops = { ...DEFAULT_DEVOPS_SETTINGS, ...parsed.devops }
           }
+          if (parsed.telemetry) {
+            this.telemetry = { ...DEFAULT_TELEMETRY_SETTINGS, ...parsed.telemetry }
+          }
         }
       } catch (error) {
         console.error('Failed to load settings:', error)
@@ -85,7 +102,8 @@ export const useSettingsStore = defineStore('settings', {
       try {
         const settings: AppSettings = {
           editor: this.editor,
-          devops: this.devops
+          devops: this.devops,
+          telemetry: this.telemetry
         }
         localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings))
       } catch (error) {
@@ -147,6 +165,44 @@ export const useSettingsStore = defineStore('settings', {
     reset() {
       this.editor = { ...DEFAULT_EDITOR_SETTINGS }
       this.devops = { ...DEFAULT_DEVOPS_SETTINGS }
+      this.save()
+    },
+
+    /**
+     * 更新遥测设置
+     */
+    updateTelemetry(settings: Partial<TelemetrySettings>) {
+      this.telemetry = { ...this.telemetry, ...settings }
+      this.save()
+    },
+
+    /**
+     * 用户同意遥测 (首次启动时调用)
+     */
+    acceptTelemetry() {
+      this.telemetry = {
+        hasAsked: true,
+        enabled: true
+      }
+      this.save()
+    },
+
+    /**
+     * 用户拒绝遥测 (首次启动时调用)
+     */
+    rejectTelemetry() {
+      this.telemetry = {
+        hasAsked: true,
+        enabled: false
+      }
+      this.save()
+    },
+
+    /**
+     * 切换遥测状态 (在设置页面中使用)
+     */
+    toggleTelemetry() {
+      this.telemetry.enabled = !this.telemetry.enabled
       this.save()
     }
   }

@@ -322,6 +322,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   maximize: () => ipcRenderer.send('window:maximize'),
   close: () => ipcRenderer.send('window:close'),
 
+  // ============ 遥测控制 ============
+  telemetry: {
+    enable: (): Promise<boolean> => ipcRenderer.invoke('telemetry:enable'),
+    disable: (): Promise<boolean> => ipcRenderer.invoke('telemetry:disable'),
+    isEnabled: (): Promise<boolean> => ipcRenderer.invoke('telemetry:isEnabled')
+  },
+
   // ============ 文件系统操作 ============
   fileSystem: {
     // 对话框
@@ -856,6 +863,13 @@ declare global {
       minimize: () => void
       maximize: () => void
       close: () => void
+
+      // 遥测控制
+      telemetry?: {
+        enable: () => Promise<boolean>
+        disable: () => Promise<boolean>
+        isEnabled: () => Promise<boolean>
+      }
 
       // 文件系统操作
       fileSystem: {

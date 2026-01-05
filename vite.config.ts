@@ -1,3 +1,4 @@
+import { sentryVitePlugin } from "@sentry/vite-plugin";
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import electron from 'vite-plugin-electron'
@@ -5,43 +6,42 @@ import renderer from 'vite-plugin-electron-renderer'
 import { resolve } from 'path'
 
 export default defineConfig({
-  plugins: [
-    vue({
-      template: {
-        compilerOptions: {
-          // 将 mdui- 开头的标签视为自定义元素
-          isCustomElement: (tag) => tag.startsWith('mdui-')
-        }
+  plugins: [vue({
+    template: {
+      compilerOptions: {
+        // 将 mdui- 开头的标签视为自定义元素
+        isCustomElement: (tag) => tag.startsWith('mdui-')
       }
-    }),
-    electron([
-      {
-        entry: 'electron/main.ts',
-        vite: {
-          build: {
-              sourcemap: true,
-            outDir: 'dist-electron',
-            rollupOptions: {
-              external: ['electron', 'node-pty']
-            }
+    }
+  }), electron([
+    {
+      entry: 'electron/main.ts',
+      vite: {
+        build: {
+            sourcemap: true,
+          outDir: 'dist-electron',
+          rollupOptions: {
+            external: ['electron', 'node-pty']
           }
         }
+      }
+    },
+    {
+      entry: 'electron/preload.ts',
+      onstart(options) {
+        options.reload()
       },
-      {
-        entry: 'electron/preload.ts',
-        onstart(options) {
-          options.reload()
-        },
-        vite: {
-          build: {
-              sourcemap: true,
-            outDir: 'dist-electron'
-          }
+      vite: {
+        build: {
+            sourcemap: true,
+          outDir: 'dist-electron'
         }
       }
-    ]),
-    renderer()
-  ],
+    }
+  ]), renderer(), sentryVitePlugin({
+    org: "zixiaosystem",
+    project: "electron"
+  })],
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src')

@@ -4,10 +4,12 @@ import { useRouter, useRoute } from 'vue-router'
 import { useEditorStore } from '@/stores/editor'
 import { useGitStore } from '@/stores/git'
 import { useThemeStore } from '@/stores/theme'
+import { useSettingsStore } from '@/stores/settings'
 import { FileExplorer } from '@/components/FileExplorer'
 import { GitPanel } from '@/components/Git'
 import TodoPanel from '@/components/Analysis/TodoPanel.vue'
 import CommitAnalysisPanel from '@/components/Analysis/CommitAnalysisPanel.vue'
+import TelemetryConsentDialog from '@/components/TelemetryConsentDialog.vue'
 import type { IndexingProgress, LanguageServerStatus } from '@/types/intelligence'
 
 // 导入 MDUI 图标
@@ -34,6 +36,7 @@ const route = useRoute()
 const editorStore = useEditorStore()
 const gitStore = useGitStore()
 const themeStore = useThemeStore()
+const settingsStore = useSettingsStore()
 
 // 索引进度状态
 const indexingProgress = ref<IndexingProgress | null>(null)
@@ -102,6 +105,11 @@ onMounted(async () => {
   if (window.electronAPI) {
     const version = await window.electronAPI.getVersion()
     console.log('logos version:', version)
+
+    // 如果用户之前同意了遥测，启用 Sentry
+    if (settingsStore.telemetry.hasAsked && settingsStore.telemetry.enabled) {
+      window.electronAPI.telemetry?.enable()
+    }
 
     // 订阅索引进度
     unsubscribeProgress = window.electronAPI.intelligence.onIndexingProgress((progress) => {
@@ -316,6 +324,9 @@ onUnmounted(() => {
         </span>
       </div>
     </div>
+
+    <!-- 遥测同意对话框 (首次启动显示) -->
+    <TelemetryConsentDialog />
   </div>
 </template>
 
