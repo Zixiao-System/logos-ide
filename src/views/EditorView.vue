@@ -8,6 +8,7 @@ import { ref, watch, onMounted, onUnmounted, computed, nextTick } from 'vue'
 import * as monaco from 'monaco-editor'
 import { useEditorStore } from '@/stores/editor'
 import { useFileExplorerStore } from '@/stores/fileExplorer'
+import { useDebugStore, type BreakpointInfo } from '@/stores/debug'
 import { getIntelligenceManager, destroyIntelligenceManager } from '@/services/lsp'
 
 // 导入 MDUI 图标
@@ -17,9 +18,14 @@ import '@mdui/icons/insert-drive-file.js'
 
 const editorStore = useEditorStore()
 const fileExplorerStore = useFileExplorerStore()
+const debugStore = useDebugStore()
 const editorContainer = ref<HTMLElement | null>(null)
 let editor: monaco.editor.IStandaloneCodeEditor | null = null
 const models = new Map<string, monaco.editor.ITextModel>()
+
+// 断点装饰器 ID 映射
+const breakpointDecorations = new Map<string, string[]>() // filePath -> decoration IDs
+const currentLineDecoration = ref<string[]>([]) // 当前执行行装饰器
 
 // 代码智能管理器
 const intelligenceManager = getIntelligenceManager()
@@ -97,7 +103,8 @@ function initEditor() {
     renderWhitespace: 'selection',
     cursorBlinking: 'smooth',
     smoothScrolling: true,
-    padding: { top: 8 }
+    padding: { top: 8 },
+    glyphMargin: true // 启用断点边距
   })
 
   // 监听内容变化
@@ -143,6 +150,81 @@ function initEditor() {
     }
   })
 
+  // 调试快捷键
+  // F5 - 继续/开始调试
+  editor.addCommand(monaco.KeyCode.F5, () => {
+    if (debugStore.isDebugging) {
+      if (debugStore.isPaused) {
+        debugStore.continue()
+      }
+    } else if (debugStore.hasConfigurations && debugStore.selectedConfigIndex >= 0) {
+      // 开始调试
+      debugStore.debugConfiguration()
+    }
+  })
+
+  // Ctrl+F5 - 运行（不调试）
+  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.F5, () => {
+    if (!debugStore.isDebugging && debugStore.hasConfigurations && debugStore.selectedConfigIndex >= 0) {
+      debugStore.runConfiguration()
+    }
+  })
+
+  // F6 - 暂停
+  editor.addCommand(monaco.KeyCode.F6, () => {
+    if (debugStore.isRunning) {
+      debugStore.pause()
+    }
+  })
+
+  // Shift+F5 - 停止调试
+  editor.addCommand(monaco.KeyMod.Shift | monaco.KeyCode.F5, () => {
+    if (debugStore.isDebugging) {
+      debugStore.stopDebugging()
+    }
+  })
+
+  // F9 - 切换断点
+  editor.addCommand(monaco.KeyCode.F9, () => {
+    if (activeTab.value && editor) {
+      const position = editor.getPosition()
+      if (position) {
+        toggleBreakpointAtLine(activeTab.value.path, position.lineNumber)
+      }
+    }
+  })
+
+  // F10 - 单步跳过
+  editor.addCommand(monaco.KeyCode.F10, () => {
+    if (debugStore.isPaused) {
+      debugStore.stepOver()
+    }
+  })
+
+  // F11 - 单步进入
+  editor.addCommand(monaco.KeyCode.F11, () => {
+    if (debugStore.isPaused) {
+      debugStore.stepInto()
+    }
+  })
+
+  // Shift+F11 - 单步跳出
+  editor.addCommand(monaco.KeyMod.Shift | monaco.KeyCode.F11, () => {
+    if (debugStore.isPaused) {
+      debugStore.stepOut()
+    }
+  })
+
+  // 监听行号点击以切换断点
+  editor.onMouseDown((e) => {
+    if (e.target.type === monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN ||
+        e.target.type === monaco.editor.MouseTargetType.GUTTER_LINE_NUMBERS) {
+      if (activeTab.value && e.target.position) {
+        toggleBreakpointAtLine(activeTab.value.path, e.target.position.lineNumber)
+      }
+    }
+  })
+
   // 初始加载当前标签页
   if (activeTab.value) {
     loadTabIntoEditor(activeTab.value)
@@ -167,6 +249,9 @@ onMounted(async () => {
   // 如果已有项目打开，则打开项目
   if (fileExplorerStore.rootPath) {
     await intelligenceManager.openProject(fileExplorerStore.rootPath)
+    // 设置调试工作区并加载配置
+    debugStore.setWorkspaceFolder(fileExplorerStore.rootPath)
+    await debugStore.loadLaunchConfigurations()
   }
 })
 
@@ -255,6 +340,112 @@ watch(() => fileExplorerStore.rootPath, async (newPath, oldPath) => {
   }
   if (newPath) {
     await intelligenceManager.openProject(newPath)
+    // 更新调试工作区并加载配置
+    debugStore.setWorkspaceFolder(newPath)
+    await debugStore.loadLaunchConfigurations()
+  } else {
+    debugStore.setWorkspaceFolder(null)
+  }
+})
+
+// ============ 断点相关功能 ============
+
+// 切换断点
+async function toggleBreakpointAtLine(filePath: string, line: number) {
+  await debugStore.toggleBreakpointAtLine(filePath, line)
+  updateBreakpointDecorations(filePath)
+}
+
+// 更新断点装饰器
+function updateBreakpointDecorations(filePath: string) {
+  if (!editor) return
+
+  const model = models.get(filePath)
+  if (!model || model !== editor.getModel()) return
+
+  const breakpoints = debugStore.getBreakpointsForFile(filePath)
+
+  const decorations: monaco.editor.IModelDeltaDecoration[] = breakpoints.map(bp => ({
+    range: new monaco.Range(bp.line, 1, bp.line, 1),
+    options: {
+      isWholeLine: false,
+      glyphMarginClassName: getBreakpointGlyphClass(bp),
+      glyphMarginHoverMessage: { value: getBreakpointHoverMessage(bp) },
+      stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges
+    }
+  }))
+
+  const oldDecorations = breakpointDecorations.get(filePath) || []
+  const newDecorations = editor.deltaDecorations(oldDecorations, decorations)
+  breakpointDecorations.set(filePath, newDecorations)
+}
+
+// 获取断点装饰器类名
+function getBreakpointGlyphClass(bp: BreakpointInfo): string {
+  if (!bp.enabled) return 'breakpoint-disabled'
+  if (!bp.verified) return 'breakpoint-unverified'
+  if (bp.condition) return 'breakpoint-conditional'
+  if (bp.logMessage) return 'breakpoint-logpoint'
+  return 'breakpoint'
+}
+
+// 获取断点悬停提示
+function getBreakpointHoverMessage(bp: BreakpointInfo): string {
+  let msg = `断点: 行 ${bp.line}`
+  if (bp.condition) msg += `\n条件: ${bp.condition}`
+  if (bp.hitCondition) msg += `\n命中条件: ${bp.hitCondition}`
+  if (bp.logMessage) msg += `\n日志: ${bp.logMessage}`
+  if (!bp.enabled) msg += '\n(已禁用)'
+  if (!bp.verified) msg += '\n(未验证)'
+  return msg
+}
+
+// 更新当前执行行
+function updateCurrentLineDecoration(filePath: string, line: number | null) {
+  if (!editor) return
+
+  const model = models.get(filePath)
+  if (!model || model !== editor.getModel()) return
+
+  if (line === null) {
+    // 清除执行行标记
+    currentLineDecoration.value = editor.deltaDecorations(currentLineDecoration.value, [])
+  } else {
+    // 显示执行行标记
+    currentLineDecoration.value = editor.deltaDecorations(currentLineDecoration.value, [{
+      range: new monaco.Range(line, 1, line, 1),
+      options: {
+        isWholeLine: true,
+        className: 'current-line-highlight',
+        glyphMarginClassName: 'current-line-glyph'
+      }
+    }])
+
+    // 滚动到当前行
+    editor.revealLineInCenter(line)
+  }
+}
+
+// 监听断点变化
+watch(() => debugStore.allBreakpoints, () => {
+  if (activeTab.value) {
+    updateBreakpointDecorations(activeTab.value.path)
+  }
+}, { deep: true })
+
+// 监听当前帧变化，更新执行行高亮
+watch(() => debugStore.currentFrame, (frame) => {
+  if (frame?.source?.path && activeTab.value?.path === frame.source.path) {
+    updateCurrentLineDecoration(frame.source.path, frame.line)
+  } else if (activeTab.value) {
+    updateCurrentLineDecoration(activeTab.value.path, null)
+  }
+})
+
+// 监听调试状态变化
+watch(() => debugStore.isPaused, (isPaused) => {
+  if (!isPaused && activeTab.value) {
+    updateCurrentLineDecoration(activeTab.value.path, null)
   }
 })
 
@@ -348,6 +539,106 @@ onUnmounted(() => {
     </div>
   </div>
 </template>
+
+<!-- Global styles for Monaco Editor decorations (must not be scoped) -->
+<style>
+/* 断点装饰器样式 */
+.breakpoint {
+  background: #e51400;
+  border-radius: 50%;
+  width: 12px !important;
+  height: 12px !important;
+  margin-left: 4px;
+  margin-top: 4px;
+}
+
+.breakpoint-disabled {
+  background: #848484;
+  border-radius: 50%;
+  width: 12px !important;
+  height: 12px !important;
+  margin-left: 4px;
+  margin-top: 4px;
+  opacity: 0.6;
+}
+
+.breakpoint-unverified {
+  background: #848484;
+  border-radius: 50%;
+  width: 12px !important;
+  height: 12px !important;
+  margin-left: 4px;
+  margin-top: 4px;
+  border: 1px dashed #e51400;
+  box-sizing: border-box;
+}
+
+.breakpoint-conditional {
+  background: #e51400;
+  border-radius: 50%;
+  width: 12px !important;
+  height: 12px !important;
+  margin-left: 4px;
+  margin-top: 4px;
+}
+
+.breakpoint-conditional::after {
+  content: '?';
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: bold;
+  color: white;
+  height: 100%;
+}
+
+.breakpoint-logpoint {
+  background: #007acc;
+  border-radius: 4px;
+  width: 12px !important;
+  height: 12px !important;
+  margin-left: 4px;
+  margin-top: 4px;
+}
+
+.breakpoint-logpoint::after {
+  content: 'L';
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  font-weight: bold;
+  color: white;
+  height: 100%;
+}
+
+/* 当前执行行高亮 */
+.current-line-highlight {
+  background: rgba(255, 238, 0, 0.15) !important;
+}
+
+.current-line-glyph {
+  background: #ffcc00;
+  width: 0;
+  height: 0;
+  border-left: 8px solid #ffcc00;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  margin-left: 3px;
+  margin-top: 5px;
+}
+
+/* 确保行号区域有足够空间显示断点 */
+.monaco-editor .margin-view-overlays .line-numbers {
+  padding-right: 8px;
+}
+
+/* 悬停时显示断点区域 */
+.monaco-editor .margin-view-overlays .glyph-margin:hover {
+  cursor: pointer;
+}
+</style>
 
 <style scoped>
 .editor-view {

@@ -11,6 +11,7 @@ import TodoPanel from '@/components/Analysis/TodoPanel.vue'
 import CommitAnalysisPanel from '@/components/Analysis/CommitAnalysisPanel.vue'
 import TelemetryConsentDialog from '@/components/TelemetryConsentDialog.vue'
 import FeedbackReportDialog from '@/components/FeedbackReportDialog.vue'
+import { DebugSidebarPanel, RunDebugBar } from '@/components/Debug'
 import type { IndexingProgress, LanguageServerStatus } from '@/types/intelligence'
 
 // 导入 MDUI 图标
@@ -30,6 +31,7 @@ import '@mdui/icons/check-circle.js'
 import '@mdui/icons/error.js'
 import '@mdui/icons/checklist.js'
 import '@mdui/icons/analytics.js'
+import '@mdui/icons/bug-report.js'
 
 
 const router = useRouter()
@@ -64,7 +66,7 @@ const handleFeedbackShortcut = (event: KeyboardEvent) => {
 // UI 状态
 const sidebarOpen = ref(true)
 const sidebarWidth = ref(260)
-const activeSidebarPanel = ref<'explorer' | 'git' | 'search' | 'todos' | 'commitAnalysis'>('explorer')
+const activeSidebarPanel = ref<'explorer' | 'git' | 'search' | 'debug' | 'todos' | 'commitAnalysis'>('explorer')
 
 // 导航项
 const navItems = [
@@ -79,6 +81,7 @@ const panelItems = [
   { id: 'explorer' as const, icon: 'folder', label: '资源管理器' },
   { id: 'git' as const, icon: 'source', label: '源代码管理' },
   { id: 'search' as const, icon: 'search', label: '搜索' },
+  { id: 'debug' as const, icon: 'bug-report', label: '运行和调试' },
   { id: 'todos' as const, icon: 'checklist', label: 'TODO' },
   { id: 'commitAnalysis' as const, icon: 'analytics', label: '提交分析' }
 ]
@@ -105,7 +108,7 @@ const navigateTo = (path: string, panel?: 'explorer' | 'git' | 'search' | 'todos
   }
 }
 
-const switchPanel = (panel: 'explorer' | 'git' | 'search' | 'todos' | 'commitAnalysis') => {
+const switchPanel = (panel: 'explorer' | 'git' | 'search' | 'debug' | 'todos' | 'commitAnalysis') => {
   if (activeSidebarPanel.value === panel && sidebarOpen.value) {
     sidebarOpen.value = false
   } else {
@@ -187,6 +190,7 @@ onUnmounted(() => {
           <mdui-icon-folder v-if="panel.icon === 'folder'"></mdui-icon-folder>
           <mdui-icon-source v-else-if="panel.icon === 'source'"></mdui-icon-source>
           <mdui-icon-search v-else-if="panel.icon === 'search'"></mdui-icon-search>
+          <mdui-icon-bug-report v-else-if="panel.icon === 'bug-report'"></mdui-icon-bug-report>
           <mdui-icon-checklist v-else-if="panel.icon === 'checklist'"></mdui-icon-checklist>
           <mdui-icon-analytics v-else-if="panel.icon === 'analytics'"></mdui-icon-analytics>
         </mdui-button-icon>
@@ -235,6 +239,9 @@ onUnmounted(() => {
         </div>
       </div>
 
+      <!-- 调试面板 -->
+      <DebugSidebarPanel v-else-if="activeSidebarPanel === 'debug'" />
+
       <!-- TODO 面板 -->
       <TodoPanel v-else-if="activeSidebarPanel === 'todos'" />
 
@@ -249,6 +256,8 @@ onUnmounted(() => {
     <div class="main-content">
       <!-- 顶部标签栏 (编辑器视图时显示) -->
       <div v-if="currentRoute === '/'" class="tab-bar">
+        <!-- 运行/调试工具栏 -->
+        <RunDebugBar />
         <div class="tabs-container">
           <div
             v-for="tab in editorStore.tabs"
@@ -464,6 +473,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  padding-top: 38px; /* macOS 窗口控制按钮空间 */
 }
 
 /* 标签栏 */

@@ -8,6 +8,7 @@ import { registerGitHubHandlers } from './services/githubService'
 import { registerGitLabHandlers } from './services/gitlabService'
 import { registerIntelligenceHandlers } from './services/intelligenceService'
 import { registerCommitAnalysisHandlers } from './services/commitAnalysisService'
+import { registerDebugHandlers, cleanupDebugService } from './services/debug/ipcHandlers'
 
 // 环境变量
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
@@ -161,6 +162,9 @@ function registerAllHandlers() {
   // ============ 代码智能 ============
   registerIntelligenceHandlers(getMainWindow)
 
+  // ============ 调试 ============
+  registerDebugHandlers(getMainWindow)
+
   // ============ 遥测控制 ============
   ipcMain.handle('telemetry:enable', () => {
     enableSentry()
@@ -209,6 +213,8 @@ app.on('before-quit', () => {
   cleanupFileWatchers()
   // 清理终端
   cleanupTerminals()
+  // 清理调试会话
+  cleanupDebugService()
 })
 
 // 处理未捕获的异常

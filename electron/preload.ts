@@ -307,6 +307,134 @@ interface LSPServiceStatus {
   }
 }
 
+// ============ 调试相关类型 ============
+
+/** 调试器类型 */
+type DebuggerType = 'node' | 'chrome' | 'gdb' | 'lldb' | 'python' | 'go'
+
+/** 调试会话状态 */
+type SessionState = 'initializing' | 'running' | 'stopped' | 'terminated'
+
+/** 断点类型 */
+type BreakpointType = 'line' | 'conditional' | 'logpoint' | 'function' | 'exception' | 'data'
+
+/** 源文件 */
+interface DebugSource {
+  name?: string
+  path?: string
+  sourceReference?: number
+}
+
+/** 断点信息 */
+interface BreakpointInfo {
+  id: string
+  verified: boolean
+  source: DebugSource
+  line: number
+  column?: number
+  enabled: boolean
+  condition?: string
+  hitCondition?: string
+  logMessage?: string
+  type: BreakpointType
+}
+
+/** 调试配置 */
+interface DebugConfig {
+  type: DebuggerType | string
+  request: 'launch' | 'attach'
+  name: string
+  program?: string
+  args?: string[]
+  cwd?: string
+  env?: Record<string, string>
+  [key: string]: unknown
+}
+
+/** 调试会话 */
+interface DebugSession {
+  id: string
+  name: string
+  type: DebuggerType | string
+  state: SessionState
+  config: DebugConfig
+  threads: DebugThread[]
+  currentThreadId?: number
+  currentFrameId?: number
+}
+
+/** 调试线程 */
+interface DebugThread {
+  id: number
+  name: string
+}
+
+/** 栈帧 */
+interface DebugStackFrame {
+  id: number
+  name: string
+  source?: DebugSource
+  line: number
+  column: number
+  presentationHint?: 'normal' | 'label' | 'subtle'
+  canRestart?: boolean
+}
+
+/** 作用域 */
+interface DebugScope {
+  name: string
+  variablesReference: number
+  expensive: boolean
+}
+
+/** 变量 */
+interface DebugVariable {
+  name: string
+  value: string
+  type?: string
+  variablesReference: number
+  namedVariables?: number
+  indexedVariables?: number
+}
+
+/** 表达式求值结果 */
+interface EvaluateResult {
+  result: string
+  type?: string
+  variablesReference: number
+  namedVariables?: number
+  indexedVariables?: number
+  memoryReference?: string
+}
+
+/** 监视表达式 */
+interface WatchExpression {
+  id: string
+  expression: string
+  result?: EvaluateResult
+  error?: string
+}
+
+/** 调试控制台消息 */
+interface DebugConsoleMessage {
+  type: 'input' | 'output' | 'error' | 'warning' | 'info'
+  message: string
+  timestamp: number
+  source?: string
+  line?: number
+}
+
+/** 启动配置文件 */
+interface LaunchConfigFile {
+  version: string
+  configurations: DebugConfig[]
+  compounds?: Array<{
+    name: string
+    configurations: string[]
+    stopAll?: boolean
+  }>
+}
+
 // 暴露给渲染进程的 API
 contextBridge.exposeInMainWorld('electronAPI', {
   // ============ 应用信息 ============
@@ -863,6 +991,223 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('lsp:serverStatus', handler)
       return () => ipcRenderer.removeListener('lsp:serverStatus', handler)
     }
+  },
+
+  // ============ 调试操作 ============
+  debug: {
+    // 会话管理
+    startSession: (config: DebugConfig, workspaceFolder: string): Promise<{ success: boolean; session?: DebugSession; error?: string }> =>
+      ipcRenderer.invoke('debug:startSession', config, workspaceFolder),
+
+    stopSession: (sessionId?: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke('debug:stopSession', sessionId),
+
+    restartSession: (sessionId?: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke('debug:restartSession', sessionId),
+
+    getSessions: (): Promise<DebugSession[]> =>
+      ipcRenderer.invoke('debug:getSessions'),
+
+    getActiveSession: (): Promise<DebugSession | undefined> =>
+      ipcRenderer.invoke('debug:getActiveSession'),
+
+    setActiveSession: (sessionId: string): Promise<void> =>
+      ipcRenderer.invoke('debug:setActiveSession', sessionId),
+
+    // 执行控制
+    continue: (sessionId?: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke('debug:continue', sessionId),
+
+    pause: (sessionId?: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke('debug:pause', sessionId),
+
+    stepOver: (sessionId?: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke('debug:stepOver', sessionId),
+
+    stepInto: (sessionId?: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke('debug:stepInto', sessionId),
+
+    stepOut: (sessionId?: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke('debug:stepOut', sessionId),
+
+    restartFrame: (frameId: number, sessionId?: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke('debug:restartFrame', frameId, sessionId),
+
+    // 断点管理
+    setBreakpoint: (
+      filePath: string,
+      line: number,
+      options?: { condition?: string; hitCondition?: string; logMessage?: string }
+    ): Promise<{ success: boolean; breakpoint?: BreakpointInfo; error?: string }> =>
+      ipcRenderer.invoke('debug:setBreakpoint', filePath, line, options),
+
+    removeBreakpoint: (breakpointId: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke('debug:removeBreakpoint', breakpointId),
+
+    toggleBreakpoint: (breakpointId: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke('debug:toggleBreakpoint', breakpointId),
+
+    toggleBreakpointAtLine: (filePath: string, line: number): Promise<{ success: boolean; breakpoint?: BreakpointInfo | null; error?: string }> =>
+      ipcRenderer.invoke('debug:toggleBreakpointAtLine', filePath, line),
+
+    getAllBreakpoints: (): Promise<BreakpointInfo[]> =>
+      ipcRenderer.invoke('debug:getAllBreakpoints'),
+
+    getBreakpointsForFile: (filePath: string): Promise<BreakpointInfo[]> =>
+      ipcRenderer.invoke('debug:getBreakpointsForFile', filePath),
+
+    // 变量和栈帧
+    getThreads: (sessionId?: string): Promise<{ success: boolean; threads?: DebugThread[]; error?: string }> =>
+      ipcRenderer.invoke('debug:getThreads', sessionId),
+
+    getStackTrace: (threadId: number, sessionId?: string): Promise<{ success: boolean; frames?: DebugStackFrame[]; error?: string }> =>
+      ipcRenderer.invoke('debug:getStackTrace', threadId, sessionId),
+
+    getScopes: (frameId: number, sessionId?: string): Promise<{ success: boolean; scopes?: DebugScope[]; error?: string }> =>
+      ipcRenderer.invoke('debug:getScopes', frameId, sessionId),
+
+    getVariables: (variablesReference: number, sessionId?: string): Promise<{ success: boolean; variables?: DebugVariable[]; error?: string }> =>
+      ipcRenderer.invoke('debug:getVariables', variablesReference, sessionId),
+
+    setVariable: (
+      variablesReference: number,
+      name: string,
+      value: string,
+      sessionId?: string
+    ): Promise<{ success: boolean; variable?: DebugVariable; error?: string }> =>
+      ipcRenderer.invoke('debug:setVariable', variablesReference, name, value, sessionId),
+
+    evaluate: (
+      expression: string,
+      frameId?: number,
+      context?: 'watch' | 'repl' | 'hover',
+      sessionId?: string
+    ): Promise<{ success: boolean; result?: EvaluateResult; error?: string }> =>
+      ipcRenderer.invoke('debug:evaluate', expression, frameId, context, sessionId),
+
+    selectFrame: (frameId: number, sessionId?: string): Promise<void> =>
+      ipcRenderer.invoke('debug:selectFrame', frameId, sessionId),
+
+    // 监视表达式
+    addWatch: (expression: string): Promise<WatchExpression> =>
+      ipcRenderer.invoke('debug:addWatch', expression),
+
+    removeWatch: (watchId: string): Promise<void> =>
+      ipcRenderer.invoke('debug:removeWatch', watchId),
+
+    refreshWatch: (watchId: string): Promise<void> =>
+      ipcRenderer.invoke('debug:refreshWatch', watchId),
+
+    refreshAllWatches: (): Promise<void> =>
+      ipcRenderer.invoke('debug:refreshAllWatches'),
+
+    getWatchExpressions: (): Promise<WatchExpression[]> =>
+      ipcRenderer.invoke('debug:getWatchExpressions'),
+
+    // 调试控制台
+    executeInConsole: (command: string, sessionId?: string): Promise<{ success: boolean; result?: EvaluateResult; error?: string }> =>
+      ipcRenderer.invoke('debug:executeInConsole', command, sessionId),
+
+    // 启动配置
+    readLaunchConfig: (workspaceFolder: string): Promise<{ success: boolean; config?: LaunchConfigFile; error?: string }> =>
+      ipcRenderer.invoke('debug:readLaunchConfig', workspaceFolder),
+
+    writeLaunchConfig: (workspaceFolder: string, config: LaunchConfigFile): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke('debug:writeLaunchConfig', workspaceFolder, config),
+
+    getDefaultLaunchConfig: (type: string, workspaceFolder: string): Promise<DebugConfig> =>
+      ipcRenderer.invoke('debug:getDefaultLaunchConfig', type, workspaceFolder),
+
+    // 事件监听
+    onSessionCreated: (callback: (session: DebugSession) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, session: DebugSession) => callback(session)
+      ipcRenderer.on('debug:sessionCreated', handler)
+      return () => ipcRenderer.removeListener('debug:sessionCreated', handler)
+    },
+
+    onSessionStateChanged: (callback: (data: { sessionId: string; state: SessionState }) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, data: { sessionId: string; state: SessionState }) => callback(data)
+      ipcRenderer.on('debug:sessionStateChanged', handler)
+      return () => ipcRenderer.removeListener('debug:sessionStateChanged', handler)
+    },
+
+    onSessionTerminated: (callback: (sessionId: string) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, sessionId: string) => callback(sessionId)
+      ipcRenderer.on('debug:sessionTerminated', handler)
+      return () => ipcRenderer.removeListener('debug:sessionTerminated', handler)
+    },
+
+    onStopped: (callback: (data: { sessionId: string; reason: string; threadId: number; allThreadsStopped?: boolean }) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, data: { sessionId: string; reason: string; threadId: number; allThreadsStopped?: boolean }) => callback(data)
+      ipcRenderer.on('debug:stopped', handler)
+      return () => ipcRenderer.removeListener('debug:stopped', handler)
+    },
+
+    onContinued: (callback: (data: { sessionId: string; threadId: number; allThreadsContinued?: boolean }) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, data: { sessionId: string; threadId: number; allThreadsContinued?: boolean }) => callback(data)
+      ipcRenderer.on('debug:continued', handler)
+      return () => ipcRenderer.removeListener('debug:continued', handler)
+    },
+
+    onBreakpointChanged: (callback: (breakpoint: BreakpointInfo) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, breakpoint: BreakpointInfo) => callback(breakpoint)
+      ipcRenderer.on('debug:breakpointChanged', handler)
+      return () => ipcRenderer.removeListener('debug:breakpointChanged', handler)
+    },
+
+    onBreakpointValidated: (callback: (breakpoint: BreakpointInfo) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, breakpoint: BreakpointInfo) => callback(breakpoint)
+      ipcRenderer.on('debug:breakpointValidated', handler)
+      return () => ipcRenderer.removeListener('debug:breakpointValidated', handler)
+    },
+
+    onBreakpointRemoved: (callback: (breakpointId: string) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, breakpointId: string) => callback(breakpointId)
+      ipcRenderer.on('debug:breakpointRemoved', handler)
+      return () => ipcRenderer.removeListener('debug:breakpointRemoved', handler)
+    },
+
+    onThreadsUpdated: (callback: (data: { sessionId: string; threads: DebugThread[] }) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, data: { sessionId: string; threads: DebugThread[] }) => callback(data)
+      ipcRenderer.on('debug:threadsUpdated', handler)
+      return () => ipcRenderer.removeListener('debug:threadsUpdated', handler)
+    },
+
+    onFrameSelected: (callback: (data: { sessionId: string; frameId: number }) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, data: { sessionId: string; frameId: number }) => callback(data)
+      ipcRenderer.on('debug:frameSelected', handler)
+      return () => ipcRenderer.removeListener('debug:frameSelected', handler)
+    },
+
+    onConsoleMessage: (callback: (data: { sessionId: string; message: DebugConsoleMessage }) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, data: { sessionId: string; message: DebugConsoleMessage }) => callback(data)
+      ipcRenderer.on('debug:consoleMessage', handler)
+      return () => ipcRenderer.removeListener('debug:consoleMessage', handler)
+    },
+
+    onWatchAdded: (callback: (watch: WatchExpression) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, watch: WatchExpression) => callback(watch)
+      ipcRenderer.on('debug:watchAdded', handler)
+      return () => ipcRenderer.removeListener('debug:watchAdded', handler)
+    },
+
+    onWatchRemoved: (callback: (watchId: string) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, watchId: string) => callback(watchId)
+      ipcRenderer.on('debug:watchRemoved', handler)
+      return () => ipcRenderer.removeListener('debug:watchRemoved', handler)
+    },
+
+    onWatchUpdated: (callback: (watch: WatchExpression) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, watch: WatchExpression) => callback(watch)
+      ipcRenderer.on('debug:watchUpdated', handler)
+      return () => ipcRenderer.removeListener('debug:watchUpdated', handler)
+    },
+
+    onActiveSessionChanged: (callback: (sessionId: string) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, sessionId: string) => callback(sessionId)
+      ipcRenderer.on('debug:activeSessionChanged', handler)
+      return () => ipcRenderer.removeListener('debug:activeSessionChanged', handler)
+    }
   }
 })
 
@@ -1136,6 +1481,88 @@ declare global {
 
         // LSP 服务器状态
         onLSPServerStatus: (callback: (event: { languageId: string; status: string; message?: string }) => void) => () => void
+      }
+
+      // 调试
+      debug: {
+        // 会话管理
+        startSession: (config: DebugConfig, workspaceFolder: string) => Promise<{ success: boolean; session?: DebugSession; error?: string }>
+        stopSession: (sessionId?: string) => Promise<{ success: boolean; error?: string }>
+        restartSession: (sessionId?: string) => Promise<{ success: boolean; error?: string }>
+        getSessions: () => Promise<DebugSession[]>
+        getActiveSession: () => Promise<DebugSession | undefined>
+        setActiveSession: (sessionId: string) => Promise<void>
+
+        // 执行控制
+        continue: (sessionId?: string) => Promise<{ success: boolean; error?: string }>
+        pause: (sessionId?: string) => Promise<{ success: boolean; error?: string }>
+        stepOver: (sessionId?: string) => Promise<{ success: boolean; error?: string }>
+        stepInto: (sessionId?: string) => Promise<{ success: boolean; error?: string }>
+        stepOut: (sessionId?: string) => Promise<{ success: boolean; error?: string }>
+        restartFrame: (frameId: number, sessionId?: string) => Promise<{ success: boolean; error?: string }>
+
+        // 断点管理
+        setBreakpoint: (
+          filePath: string,
+          line: number,
+          options?: { condition?: string; hitCondition?: string; logMessage?: string }
+        ) => Promise<{ success: boolean; breakpoint?: BreakpointInfo; error?: string }>
+        removeBreakpoint: (breakpointId: string) => Promise<{ success: boolean; error?: string }>
+        toggleBreakpoint: (breakpointId: string) => Promise<{ success: boolean; error?: string }>
+        toggleBreakpointAtLine: (filePath: string, line: number) => Promise<{ success: boolean; breakpoint?: BreakpointInfo | null; error?: string }>
+        getAllBreakpoints: () => Promise<BreakpointInfo[]>
+        getBreakpointsForFile: (filePath: string) => Promise<BreakpointInfo[]>
+
+        // 变量和栈帧
+        getThreads: (sessionId?: string) => Promise<{ success: boolean; threads?: DebugThread[]; error?: string }>
+        getStackTrace: (threadId: number, sessionId?: string) => Promise<{ success: boolean; frames?: DebugStackFrame[]; error?: string }>
+        getScopes: (frameId: number, sessionId?: string) => Promise<{ success: boolean; scopes?: DebugScope[]; error?: string }>
+        getVariables: (variablesReference: number, sessionId?: string) => Promise<{ success: boolean; variables?: DebugVariable[]; error?: string }>
+        setVariable: (
+          variablesReference: number,
+          name: string,
+          value: string,
+          sessionId?: string
+        ) => Promise<{ success: boolean; variable?: DebugVariable; error?: string }>
+        evaluate: (
+          expression: string,
+          frameId?: number,
+          context?: 'watch' | 'repl' | 'hover',
+          sessionId?: string
+        ) => Promise<{ success: boolean; result?: EvaluateResult; error?: string }>
+        selectFrame: (frameId: number, sessionId?: string) => Promise<void>
+
+        // 监视表达式
+        addWatch: (expression: string) => Promise<WatchExpression>
+        removeWatch: (watchId: string) => Promise<void>
+        refreshWatch: (watchId: string) => Promise<void>
+        refreshAllWatches: () => Promise<void>
+        getWatchExpressions: () => Promise<WatchExpression[]>
+
+        // 调试控制台
+        executeInConsole: (command: string, sessionId?: string) => Promise<{ success: boolean; result?: EvaluateResult; error?: string }>
+
+        // 启动配置
+        readLaunchConfig: (workspaceFolder: string) => Promise<{ success: boolean; config?: LaunchConfigFile; error?: string }>
+        writeLaunchConfig: (workspaceFolder: string, config: LaunchConfigFile) => Promise<{ success: boolean; error?: string }>
+        getDefaultLaunchConfig: (type: string, workspaceFolder: string) => Promise<DebugConfig>
+
+        // 事件监听
+        onSessionCreated: (callback: (session: DebugSession) => void) => () => void
+        onSessionStateChanged: (callback: (data: { sessionId: string; state: SessionState }) => void) => () => void
+        onSessionTerminated: (callback: (sessionId: string) => void) => () => void
+        onStopped: (callback: (data: { sessionId: string; reason: string; threadId: number; allThreadsStopped?: boolean }) => void) => () => void
+        onContinued: (callback: (data: { sessionId: string; threadId: number; allThreadsContinued?: boolean }) => void) => () => void
+        onBreakpointChanged: (callback: (breakpoint: BreakpointInfo) => void) => () => void
+        onBreakpointValidated: (callback: (breakpoint: BreakpointInfo) => void) => () => void
+        onBreakpointRemoved: (callback: (breakpointId: string) => void) => () => void
+        onThreadsUpdated: (callback: (data: { sessionId: string; threads: DebugThread[] }) => void) => () => void
+        onFrameSelected: (callback: (data: { sessionId: string; frameId: number }) => void) => () => void
+        onConsoleMessage: (callback: (data: { sessionId: string; message: DebugConsoleMessage }) => void) => () => void
+        onWatchAdded: (callback: (watch: WatchExpression) => void) => () => void
+        onWatchRemoved: (callback: (watchId: string) => void) => () => void
+        onWatchUpdated: (callback: (watch: WatchExpression) => void) => () => void
+        onActiveSessionChanged: (callback: (sessionId: string) => void) => () => void
       }
     }
   }
