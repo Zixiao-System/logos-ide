@@ -71,13 +71,16 @@ Logos is a modern, lightweight code editor built with Electron and Vue 3. It fea
 
 ```bash
 # macOS (Homebrew)
-brew install --cask lsp-ide
+brew tap Zixiao-System/tap
+brew install --cask logos
 
-# Windows (Winget)
-winget install Zixiao.LogosIDE
+# Arch Linux (AUR)
+yay -S logos-bin
+# or
+paru -S logos-bin
 
-# Linux (Snap)
-snap install lsp-ide
+# Windows (Winget) - Coming soon
+# winget install Zixiao.Logos
 ```
 
 ## Screenshots

@@ -1,0 +1,515 @@
+name: Release & Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 2026.1.1)'
+        required: true
+        type: string
+
+env:
+  APP_NAME: logos
+  NODE_VERSION: '18'
+
+jobs:
+  # ============================================
+  # Build job - Build on all platforms
+  # ============================================
+  build:
+    name: Build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: macos-latest
+            platform: darwin
+          - os: windows-latest
+            platform: win32
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Use Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install WASI SDK (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          curl -LO https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-24/wasi-sdk-24.0-x86_64-linux.tar.gz
+          tar xzf wasi-sdk-24.0-x86_64-linux.tar.gz
+          echo "WASI_SDK_PATH=$PWD/wasi-sdk-24.0-x86_64-linux" >> $GITHUB_ENV
+
+      - name: Install WASI SDK (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          curl -LO https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-24/wasi-sdk-24.0-arm64-macos.tar.gz
+          tar xzf wasi-sdk-24.0-arm64-macos.tar.gz
+          echo "WASI_SDK_PATH=$PWD/wasi-sdk-24.0-arm64-macos" >> $GITHUB_ENV
+
+      - name: Install WASI SDK (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-24/wasi-sdk-24.0-x86_64-windows.tar.gz" -OutFile "wasi-sdk.tar.gz"
+          tar xzf wasi-sdk.tar.gz
+          echo "WASI_SDK_PATH=$PWD/wasi-sdk-24.0-x86_64-windows" >> $env:GITHUB_ENV
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --locked
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            logos-lang/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('logos-lang/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Build WASM
+        working-directory: logos-lang
+        shell: bash
+        run: |
+          export CC_wasm32_unknown_unknown="${WASI_SDK_PATH}/bin/clang"
+          export CFLAGS_wasm32_unknown_unknown="--target=wasm32-wasi --sysroot=${WASI_SDK_PATH}/share/wasi-sysroot -fno-exceptions"
+          wasm-pack build crates/logos-wasm --target web --release --out-dir ../../pkg --out-name logos-lang
+
+      - name: Install dependencies
+        run: npm ci --include=dev
+
+      - name: Build (vite + electron-builder)
+        env:
+          CI: true
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          NODE_OPTIONS: --max-old-space-size=4096
+          # macOS code signing (optional)
+          CSC_LINK: ${{ secrets.MAC_CERTS }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTS_PASSWORD }}
+          # Windows code signing (optional)
+          WIN_CSC_LINK: ${{ secrets.WIN_CERTS }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CERTS_PASSWORD }}
+        run: npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform }}
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.exe
+            release/*.msi
+            release/*.AppImage
+            release/*.deb
+            release/*.rpm
+            release/*.tar.gz
+          if-no-files-found: warn
+
+  # ============================================
+  # GitHub Release job
+  # ============================================
+  github-release:
+    name: GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      release_id: ${{ steps.create_release.outputs.id }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: find artifacts -type f | head -50
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get commits since last tag
+          LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$LAST_TAG" ]; then
+            CHANGELOG=$(git log ${LAST_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
+          else
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" --no-merges -20)
+          fi
+
+          # Write to file for multiline output
+          echo "$CHANGELOG" > changelog.txt
+          echo "changelog_file=changelog.txt" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Logos v${{ needs.build.outputs.version }}
+          tag_name: ${{ github.ref_name }}
+          body_path: changelog.txt
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
+          files: |
+            artifacts/**/*.dmg
+            artifacts/**/*.zip
+            artifacts/**/*.exe
+            artifacts/**/*.msi
+            artifacts/**/*.AppImage
+            artifacts/**/*.deb
+            artifacts/**/*.rpm
+            artifacts/**/*.tar.gz
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ============================================
+  # Homebrew Tap job
+  # ============================================
+  homebrew:
+    name: Publish to Homebrew Tap
+    needs: [build, github-release]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout homebrew-tap repo
+        uses: actions/checkout@v4
+        with:
+          repository: Zixiao-System/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-darwin
+          path: artifacts
+
+      - name: Calculate SHA256
+        id: sha
+        run: |
+          # Find the zip files for macOS
+          ARM64_ZIP=$(find artifacts -name "*arm64*.zip" | head -1)
+          X64_ZIP=$(find artifacts -name "*x64*.zip" -o -name "*intel*.zip" | head -1)
+
+          if [ -n "$ARM64_ZIP" ]; then
+            ARM64_SHA=$(sha256sum "$ARM64_ZIP" | cut -d ' ' -f 1)
+            echo "arm64_sha=$ARM64_SHA" >> $GITHUB_OUTPUT
+            echo "arm64_file=$(basename $ARM64_ZIP)" >> $GITHUB_OUTPUT
+          fi
+
+          if [ -n "$X64_ZIP" ]; then
+            X64_SHA=$(sha256sum "$X64_ZIP" | cut -d ' ' -f 1)
+            echo "x64_sha=$X64_SHA" >> $GITHUB_OUTPUT
+            echo "x64_file=$(basename $X64_ZIP)" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update Homebrew Cask formula
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          ARM64_SHA: ${{ steps.sha.outputs.arm64_sha }}
+          X64_SHA: ${{ steps.sha.outputs.x64_sha }}
+          ARM64_FILE: ${{ steps.sha.outputs.arm64_file }}
+          X64_FILE: ${{ steps.sha.outputs.x64_file }}
+        run: |
+          mkdir -p homebrew-tap/Casks
+          cat > homebrew-tap/Casks/logos.rb << 'FORMULA'
+          cask "logos" do
+            version "VERSION_PLACEHOLDER"
+
+            on_arm do
+              url "https://github.com/Zixiao-System/logos/releases/download/v#{version}/ARM64_FILE_PLACEHOLDER"
+              sha256 "ARM64_SHA_PLACEHOLDER"
+            end
+
+            on_intel do
+              url "https://github.com/Zixiao-System/logos/releases/download/v#{version}/X64_FILE_PLACEHOLDER"
+              sha256 "X64_SHA_PLACEHOLDER"
+            end
+
+            name "Logos"
+            desc "A Modern, Lightweight Code Editor"
+            homepage "https://github.com/Zixiao-System/logos"
+
+            livecheck do
+              url :url
+              strategy :github_latest
+            end
+
+            app "Logos.app"
+
+            zap trash: [
+              "~/Library/Application Support/logos",
+              "~/Library/Caches/io.zixiao.logos",
+              "~/Library/Preferences/io.zixiao.logos.plist",
+              "~/Library/Saved Application State/io.zixiao.logos.savedState",
+            ]
+          end
+          FORMULA
+
+          # Replace placeholders
+          sed -i "s/VERSION_PLACEHOLDER/${VERSION}/g" homebrew-tap/Casks/logos.rb
+          sed -i "s/ARM64_SHA_PLACEHOLDER/${ARM64_SHA}/g" homebrew-tap/Casks/logos.rb
+          sed -i "s/X64_SHA_PLACEHOLDER/${X64_SHA}/g" homebrew-tap/Casks/logos.rb
+          sed -i "s/ARM64_FILE_PLACEHOLDER/${ARM64_FILE}/g" homebrew-tap/Casks/logos.rb
+          sed -i "s/X64_FILE_PLACEHOLDER/${X64_FILE}/g" homebrew-tap/Casks/logos.rb
+
+      - name: Commit and push to homebrew-tap
+        working-directory: homebrew-tap
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git diff --staged --quiet || git commit -m "Update logos to v${{ needs.build.outputs.version }}"
+          git push
+
+  # ============================================
+  # ArchLinux AUR job
+  # ============================================
+  aur:
+    name: Publish to AUR
+    needs: [build, github-release]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-linux
+          path: artifacts
+
+      - name: Setup SSH for AUR
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.AUR_PUBLISH_SSH_KEY }}
+
+      - name: Add AUR host key
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -t ed25519 aur.archlinux.org >> ~/.ssh/known_hosts
+
+      - name: Clone AUR repository
+        run: |
+          git clone ssh://aur@aur.archlinux.org/logos-bin.git aur-repo
+
+      - name: Calculate AppImage SHA256
+        id: sha
+        run: |
+          APPIMAGE=$(find artifacts -name "*.AppImage" | head -1)
+          if [ -n "$APPIMAGE" ]; then
+            APPIMAGE_SHA=$(sha256sum "$APPIMAGE" | cut -d ' ' -f 1)
+            echo "appimage_sha=$APPIMAGE_SHA" >> $GITHUB_OUTPUT
+            echo "appimage_name=$(basename $APPIMAGE)" >> $GITHUB_OUTPUT
+          else
+            echo "::error::No AppImage found!"
+            exit 1
+          fi
+
+      - name: Update PKGBUILD
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          APPIMAGE_SHA: ${{ steps.sha.outputs.appimage_sha }}
+          APPIMAGE_NAME: ${{ steps.sha.outputs.appimage_name }}
+        run: |
+          cat > aur-repo/PKGBUILD << 'PKGBUILD_EOF'
+# Maintainer: Zixiao System <hwllochen@qq.com>
+pkgname=logos-bin
+pkgver=VERSION_PLACEHOLDER
+pkgrel=1
+pkgdesc="A Modern, Lightweight Code Editor"
+arch=('x86_64')
+url="https://github.com/Zixiao-System/logos"
+license=('MIT')
+depends=('gtk3' 'nss' 'alsa-lib' 'libxss' 'libxtst')
+optdepends=(
+  'git: Git integration'
+  'bash: Terminal support'
+  'zsh: ZSH terminal support'
+)
+provides=('logos')
+conflicts=('logos' 'logos-git')
+source_x86_64=("${pkgname}-${pkgver}.AppImage::https://github.com/Zixiao-System/logos/releases/download/v${pkgver}/APPIMAGE_NAME_PLACEHOLDER")
+sha256sums_x86_64=('APPIMAGE_SHA_PLACEHOLDER')
+options=('!strip')
+
+prepare() {
+  chmod +x "${srcdir}/${pkgname}-${pkgver}.AppImage"
+  "${srcdir}/${pkgname}-${pkgver}.AppImage" --appimage-extract
+}
+
+package() {
+  install -dm755 "${pkgdir}/opt/${pkgname}"
+  cp -r "${srcdir}/squashfs-root/"* "${pkgdir}/opt/${pkgname}/"
+  chmod 755 "${pkgdir}/opt/${pkgname}/logos"
+
+  install -dm755 "${pkgdir}/usr/bin"
+  ln -s "/opt/${pkgname}/logos" "${pkgdir}/usr/bin/logos"
+
+  install -Dm644 /dev/stdin "${pkgdir}/usr/share/applications/logos.desktop" << EOF
+[Desktop Entry]
+Name=Logos
+Comment=A Modern, Lightweight Code Editor
+Exec=/opt/${pkgname}/logos %U
+Icon=logos
+Type=Application
+Categories=Development;IDE;TextEditor;
+MimeType=text/plain;inode/directory;
+StartupWMClass=Logos
+EOF
+
+  for size in 16 32 48 64 128 256 512; do
+    if [ -f "${srcdir}/squashfs-root/usr/share/icons/hicolor/${size}x${size}/apps/logos.png" ]; then
+      install -Dm644 "${srcdir}/squashfs-root/usr/share/icons/hicolor/${size}x${size}/apps/logos.png" \
+        "${pkgdir}/usr/share/icons/hicolor/${size}x${size}/apps/logos.png"
+    fi
+  done
+
+  if [ -f "${srcdir}/squashfs-root/LICENSE" ]; then
+    install -Dm644 "${srcdir}/squashfs-root/LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+  fi
+}
+PKGBUILD_EOF
+
+          # Replace placeholders
+          sed -i "s/VERSION_PLACEHOLDER/${VERSION}/g" aur-repo/PKGBUILD
+          sed -i "s/APPIMAGE_SHA_PLACEHOLDER/${APPIMAGE_SHA}/g" aur-repo/PKGBUILD
+          sed -i "s/APPIMAGE_NAME_PLACEHOLDER/${APPIMAGE_NAME}/g" aur-repo/PKGBUILD
+
+      - name: Update .SRCINFO
+        working-directory: aur-repo
+        run: |
+          # Generate .SRCINFO from PKGBUILD
+          docker run --rm -v "$PWD:/pkg" archlinux:base-devel bash -c "
+            cd /pkg
+            useradd -m builder
+            chown -R builder:builder .
+            su builder -c 'makepkg --printsrcinfo > .SRCINFO'
+          "
+
+      - name: Commit and push to AUR
+        working-directory: aur-repo
+        run: |
+          git config user.name "Zixiao System"
+          git config user.email "hwllochen@qq.com"
+          git add PKGBUILD .SRCINFO
+          git diff --staged --quiet || git commit -m "Update to v${{ needs.build.outputs.version }}"
+          git push
+
+  # ============================================
+  # Update documentation job
+  # ============================================
+  update-docs:
+    name: Update Documentation
+    needs: [build, github-release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Update README download links
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          REPO="Zixiao-System/logos"
+          BASE_URL="https://github.com/${REPO}/releases/download/v${VERSION}"
+
+          # Update download table in README
+          sed -i "s|\[Download\](#)|\[Download\](${BASE_URL}/Logos-${VERSION}-arm64.dmg)|g" README.md
+
+          # Update version badges if they exist
+          sed -i "s|version-[0-9.]*-|version-${VERSION}-|g" README.md
+
+      - name: Update package.json version
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          # Update version in package.json if different
+          npm version $VERSION --no-git-tag-version --allow-same-version || true
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "docs: update download links and version to v${{ needs.build.outputs.version }}"
+          title: "docs: Update for release v${{ needs.build.outputs.version }}"
+          body: |
+            ## Automated Documentation Update
+
+            This PR updates the documentation for release v${{ needs.build.outputs.version }}:
+
+            - Updated download links in README.md
+            - Updated version references
+
+            ---
+            *This PR was automatically created by the Release workflow.*
+          branch: docs/release-v${{ needs.build.outputs.version }}
+          delete-branch: true
+          labels: |
+            documentation
+            automated
+
+  # ============================================
+  # Notify job (optional)
+  # ============================================
+  notify:
+    name: Notify Release
+    needs: [build, github-release, homebrew, aur, update-docs]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check job results
+        run: |
+          echo "Build: ${{ needs.build.result }}"
+          echo "GitHub Release: ${{ needs.github-release.result }}"
+          echo "Homebrew: ${{ needs.homebrew.result }}"
+          echo "AUR: ${{ needs.aur.result }}"
+          echo "Update Docs: ${{ needs.update-docs.result }}"
+
+          if [ "${{ needs.build.result }}" == "failure" ] || \
+             [ "${{ needs.github-release.result }}" == "failure" ]; then
+            echo "::error::Critical job failed!"
+            exit 1
+          fi
+
+          echo "Release v${{ needs.build.outputs.version }} completed!"

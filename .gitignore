@@ -23,6 +23,9 @@ ide/dist-electron/
 ide/.vite/
 ide/*.local
 
+#Secrets
+.env
+
 
 # Logos Lang (Rust WASM)
 logos-lang/target/
