@@ -11,7 +11,7 @@ import TodoPanel from '@/components/Analysis/TodoPanel.vue'
 import CommitAnalysisPanel from '@/components/Analysis/CommitAnalysisPanel.vue'
 import TelemetryConsentDialog from '@/components/TelemetryConsentDialog.vue'
 import FeedbackReportDialog from '@/components/FeedbackReportDialog.vue'
-import { DebugSidebarPanel, RunDebugBar } from '@/components/Debug'
+import { DebugSidebarPanel } from '@/components/Debug'
 import type { IndexingProgress, LanguageServerStatus } from '@/types/intelligence'
 
 // 导入 MDUI 图标
@@ -256,8 +256,6 @@ onUnmounted(() => {
     <div class="main-content">
       <!-- 顶部标签栏 (编辑器视图时显示) -->
       <div v-if="currentRoute === '/'" class="tab-bar">
-        <!-- 运行/调试工具栏 -->
-        <RunDebugBar />
         <div class="tabs-container">
           <div
             v-for="tab in editorStore.tabs"
