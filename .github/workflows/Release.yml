@@ -109,18 +109,30 @@ jobs:
         run: npm ci --include=dev
 
       - name: Build (vite + electron-builder)
+        shell: bash
         env:
           CI: true
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           NODE_OPTIONS: --max-old-space-size=4096
-          # macOS code signing (optional)
-          CSC_LINK: ${{ secrets.MAC_CERTS }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTS_PASSWORD }}
-          # Windows code signing (optional)
-          WIN_CSC_LINK: ${{ secrets.WIN_CERTS }}
-          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CERTS_PASSWORD }}
-        run: npm run build
+          # Code signing secrets (optional) - will be unset if empty
+          MAC_CERTS_SECRET: ${{ secrets.MAC_CERTS }}
+          MAC_CERTS_PASSWORD_SECRET: ${{ secrets.MAC_CERTS_PASSWORD }}
+          WIN_CERTS_SECRET: ${{ secrets.WIN_CERTS }}
+          WIN_CERTS_PASSWORD_SECRET: ${{ secrets.WIN_CERTS_PASSWORD }}
+        run: |
+          # Only set code signing env vars if secrets are configured
+          if [ -n "$MAC_CERTS_SECRET" ]; then
+            export CSC_LINK="$MAC_CERTS_SECRET"
+            export CSC_KEY_PASSWORD="$MAC_CERTS_PASSWORD_SECRET"
+          else
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+          fi
+          if [ -n "$WIN_CERTS_SECRET" ]; then
+            export WIN_CSC_LINK="$WIN_CERTS_SECRET"
+            export WIN_CSC_KEY_PASSWORD="$WIN_CERTS_PASSWORD_SECRET"
+          fi
+          npm run build
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
