@@ -65,6 +65,7 @@
     "vite": "^5.2.8",
     "vite-plugin-electron": "^0.28.6",
     "vite-plugin-electron-renderer": "^0.14.5",
+    "vite-plugin-monaco-editor": "^1.1.0",
     "vue-tsc": "^2.0.7"
   },
   "build": {
