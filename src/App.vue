@@ -5,8 +5,10 @@ import { useEditorStore } from '@/stores/editor'
 import { useGitStore } from '@/stores/git'
 import { useThemeStore } from '@/stores/theme'
 import { useSettingsStore } from '@/stores/settings'
+import { useBottomPanelStore } from '@/stores/bottomPanel'
 import { FileExplorer } from '@/components/FileExplorer'
 import { GitPanel } from '@/components/Git'
+import { BottomPanel } from '@/components/BottomPanel'
 import TodoPanel from '@/components/Analysis/TodoPanel.vue'
 import CommitAnalysisPanel from '@/components/Analysis/CommitAnalysisPanel.vue'
 import TelemetryConsentDialog from '@/components/TelemetryConsentDialog.vue'
@@ -40,6 +42,7 @@ const editorStore = useEditorStore()
 const gitStore = useGitStore()
 const themeStore = useThemeStore()
 const settingsStore = useSettingsStore()
+const bottomPanelStore = useBottomPanelStore()
 
 // 索引进度状态
 const indexingProgress = ref<IndexingProgress | null>(null)
@@ -68,13 +71,21 @@ const sidebarOpen = ref(true)
 const sidebarWidth = ref(260)
 const activeSidebarPanel = ref<'explorer' | 'git' | 'search' | 'debug' | 'todos' | 'commitAnalysis'>('explorer')
 
-// 导航项
+// 导航项 (移除终端，改为底部面板)
 const navItems = [
   { path: '/', icon: 'code', label: '编辑器', panel: 'explorer' as const },
-  { path: '/terminal', icon: 'terminal', label: '终端' },
   { path: '/devops', icon: 'dashboard', label: 'DevOps' },
   { path: '/settings', icon: 'settings', label: '设置' }
 ]
+
+// 切换底部终端面板
+const toggleTerminalPanel = () => {
+  if (bottomPanelStore.activeTab === 'terminal' && bottomPanelStore.isVisible) {
+    bottomPanelStore.setVisible(false)
+  } else {
+    bottomPanelStore.setActiveTab('terminal')
+  }
+}
 
 // 侧边栏面板项
 const panelItems = [
@@ -198,6 +209,14 @@ onUnmounted(() => {
 
       <!-- 底部导航 -->
       <div class="activity-bar-bottom">
+        <!-- 终端切换按钮 -->
+        <mdui-button-icon
+          :class="{ active: bottomPanelStore.isVisible && bottomPanelStore.activeTab === 'terminal' }"
+          @click="toggleTerminalPanel"
+          title="终端"
+        >
+          <mdui-icon-terminal></mdui-icon-terminal>
+        </mdui-button-icon>
         <mdui-button-icon
           v-for="item in navItems.filter(n => n.path !== '/')"
           :key="item.path"
@@ -205,8 +224,7 @@ onUnmounted(() => {
           @click="navigateTo(item.path)"
           :title="item.label"
         >
-          <mdui-icon-terminal v-if="item.icon === 'terminal'"></mdui-icon-terminal>
-          <mdui-icon-dashboard v-else-if="item.icon === 'dashboard'"></mdui-icon-dashboard>
+          <mdui-icon-dashboard v-if="item.icon === 'dashboard'"></mdui-icon-dashboard>
           <mdui-icon-settings v-else-if="item.icon === 'settings'"></mdui-icon-settings>
         </mdui-button-icon>
       </div>
@@ -278,13 +296,19 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- 路由视图 -->
-      <div class="content-area">
-        <router-view v-slot="{ Component }">
-          <transition name="fade" mode="out-in">
-            <component :is="Component" />
-          </transition>
-        </router-view>
+      <!-- 编辑器和底部面板的上下分屏容器 -->
+      <div class="editor-panel-container">
+        <!-- 路由视图 (编辑器等) -->
+        <div class="content-area">
+          <router-view v-slot="{ Component }">
+            <transition name="fade" mode="out-in">
+              <component :is="Component" />
+            </transition>
+          </router-view>
+        </div>
+
+        <!-- 底部面板 (终端、输出等) -->
+        <BottomPanel />
       </div>
     </div>
 
@@ -474,6 +498,21 @@ onUnmounted(() => {
   padding-top: 38px; /* macOS 窗口控制按钮空间 */
 }
 
+/* 编辑器和底部面板的分屏容器 */
+.editor-panel-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* 内容区域 */
+.content-area {
+  flex: 1;
+  overflow: hidden;
+  min-height: 100px; /* 确保编辑器最小高度 */
+}
+
 /* 标签栏 */
 .tab-bar {
   display: flex;
@@ -555,12 +594,6 @@ onUnmounted(() => {
 
 .tab.dirty .tab-name {
   font-style: italic;
-}
-
-/* 内容区域 */
-.content-area {
-  flex: 1;
-  overflow: hidden;
 }
 
 /* 状态栏 */
