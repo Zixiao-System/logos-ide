@@ -9,6 +9,7 @@ import { registerGitLabHandlers } from './services/gitlabService'
 import { registerIntelligenceHandlers } from './services/intelligenceService'
 import { registerCommitAnalysisHandlers } from './services/commitAnalysisService'
 import { registerDebugHandlers, cleanupDebugService } from './services/debug/ipcHandlers'
+import { registerUpdateHandlers } from './services/updateService'
 
 // 环境变量
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
@@ -164,6 +165,9 @@ function registerAllHandlers() {
 
   // ============ 调试 ============
   registerDebugHandlers(getMainWindow)
+
+  // ============ 自动更新 ============
+  registerUpdateHandlers(getMainWindow)
 
   // ============ 遥测控制 ============
   ipcMain.handle('telemetry:enable', () => {

@@ -309,6 +309,39 @@ interface LSPServiceStatus {
 
 // ============ 调试相关类型 ============
 
+/** 更新状态 */
+type UpdateStatus =
+  | 'checking'
+  | 'available'
+  | 'not-available'
+  | 'downloading'
+  | 'downloaded'
+  | 'error'
+
+/** 更新信息 */
+interface UpdateInfo {
+  version: string
+  releaseDate?: string
+  releaseNotes?: string | Array<{ version: string; note: string }>
+}
+
+/** 下载进度 */
+interface ProgressInfo {
+  total: number
+  delta: number
+  transferred: number
+  percent: number
+  bytesPerSecond: number
+}
+
+/** 更新状态 */
+interface UpdateState {
+  status: UpdateStatus
+  info?: UpdateInfo
+  progress?: ProgressInfo
+  error?: string
+}
+
 /** 调试器类型 */
 type DebuggerType = 'node' | 'chrome' | 'gdb' | 'lldb' | 'python' | 'go'
 
@@ -1208,6 +1241,36 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('debug:activeSessionChanged', handler)
       return () => ipcRenderer.removeListener('debug:activeSessionChanged', handler)
     }
+  },
+
+  // ============ 自动更新 ============
+  updater: {
+    // 检查更新
+    check: (): Promise<{ success: boolean; result?: unknown; error?: string }> =>
+      ipcRenderer.invoke('updater:check'),
+
+    // 下载更新
+    download: (): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke('updater:download'),
+
+    // 安装更新（退出并安装）
+    install: (): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke('updater:install'),
+
+    // 获取当前状态
+    getStatus: (): Promise<UpdateState> =>
+      ipcRenderer.invoke('updater:getStatus'),
+
+    // 设置自动下载
+    setAutoDownload: (enabled: boolean): Promise<{ success: boolean }> =>
+      ipcRenderer.invoke('updater:setAutoDownload', enabled),
+
+    // 监听更新状态
+    onStatus: (callback: (state: UpdateState) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, state: UpdateState) => callback(state)
+      ipcRenderer.on('updater:status', handler)
+      return () => ipcRenderer.removeListener('updater:status', handler)
+    }
   }
 })
 
@@ -1563,6 +1626,16 @@ declare global {
         onWatchRemoved: (callback: (watchId: string) => void) => () => void
         onWatchUpdated: (callback: (watch: WatchExpression) => void) => () => void
         onActiveSessionChanged: (callback: (sessionId: string) => void) => () => void
+      }
+
+      // 自动更新
+      updater: {
+        check: () => Promise<{ success: boolean; result?: unknown; error?: string }>
+        download: () => Promise<{ success: boolean; error?: string }>
+        install: () => Promise<{ success: boolean }>
+        getStatus: () => Promise<UpdateState>
+        setAutoDownload: (enabled: boolean) => Promise<{ success: boolean }>
+        onStatus: (callback: (state: UpdateState) => void) => () => void
       }
     }
   }

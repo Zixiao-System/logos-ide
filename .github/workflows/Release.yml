@@ -271,12 +271,12 @@ jobs:
           X64_FILE: ${{ steps.sha.outputs.x64_file }}
         run: |
           mkdir -p homebrew-tap/Casks
-          cp packaging/homebrew/logos.rb.template homebrew-tap/Casks/logos.rb
-          sed -i "s/@@VERSION@@/${VERSION}/g" homebrew-tap/Casks/logos.rb
-          sed -i "s/@@ARM64_SHA@@/${ARM64_SHA}/g" homebrew-tap/Casks/logos.rb
-          sed -i "s/@@X64_SHA@@/${X64_SHA}/g" homebrew-tap/Casks/logos.rb
-          sed -i "s/@@ARM64_FILE@@/${ARM64_FILE}/g" homebrew-tap/Casks/logos.rb
-          sed -i "s/@@X64_FILE@@/${X64_FILE}/g" homebrew-tap/Casks/logos.rb
+          cp packaging/homebrew/logos.rb.template homebrew-tap/Casks/logos-editor.rb
+          sed -i "s/@@VERSION@@/${VERSION}/g" homebrew-tap/Casks/logos-editor.rb
+          sed -i "s/@@ARM64_SHA@@/${ARM64_SHA}/g" homebrew-tap/Casks/logos-editor.rb
+          sed -i "s/@@X64_SHA@@/${X64_SHA}/g" homebrew-tap/Casks/logos-editor.rb
+          sed -i "s/@@ARM64_FILE@@/${ARM64_FILE}/g" homebrew-tap/Casks/logos-editor.rb
+          sed -i "s/@@X64_FILE@@/${X64_FILE}/g" homebrew-tap/Casks/logos-editor.rb
 
       - name: Commit and push to homebrew-tap
         working-directory: homebrew-tap

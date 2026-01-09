@@ -1,4 +1,4 @@
-cask "logos" do
+cask "logos-editor" do
   version "@@VERSION@@"
 
   on_arm do
