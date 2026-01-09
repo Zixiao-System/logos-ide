@@ -1,16 +1,16 @@
 /**
  * 补全 Provider
- * 支持双路径: IPC (TypeScript/JavaScript) 和 WASM (其他语言)
+ * 支持双路径: IPC (TypeScript/JavaScript) 和 Daemon (Rust 守护进程)
  */
 
 import * as monaco from 'monaco-editor'
-import { wasmService } from '@/services/language/WasmLanguageService'
+import { daemonService } from '@/services/language/DaemonLanguageService'
 
 export class CompletionProvider implements monaco.languages.CompletionItemProvider {
   triggerCharacters = ['.', '"', "'", '/', '@', '<', '{', '(']
-  private mode: 'ipc' | 'wasm'
+  private mode: 'ipc' | 'daemon'
 
-  constructor(mode: 'ipc' | 'wasm' = 'ipc') {
+  constructor(mode: 'ipc' | 'daemon' = 'ipc') {
     this.mode = mode
   }
 
@@ -25,8 +25,8 @@ export class CompletionProvider implements monaco.languages.CompletionItemProvid
     const filePath = model.uri.fsPath
 
     try {
-      if (this.mode === 'wasm') {
-        return this.provideWasmCompletions(filePath, position, token)
+      if (this.mode === 'daemon') {
+        return this.provideDaemonCompletions(filePath, position, token)
       } else {
         return this.provideIpcCompletions(filePath, position, context, token)
       }
@@ -87,15 +87,15 @@ export class CompletionProvider implements monaco.languages.CompletionItemProvid
     }
   }
 
-  private provideWasmCompletions(
+  private async provideDaemonCompletions(
     filePath: string,
     position: monaco.Position,
     token: monaco.CancellationToken
-  ): monaco.languages.CompletionList | null {
-    if (!wasmService.isInitialized()) return null
+  ): Promise<monaco.languages.CompletionList | null> {
+    if (!daemonService.isInitialized()) return null
 
-    // WASM 使用 0-indexed 行列号
-    const completions = wasmService.getCompletions(
+    // Daemon 使用 0-indexed 行列号
+    const completions = await daemonService.getCompletions(
       filePath,
       position.lineNumber - 1,
       position.column - 1

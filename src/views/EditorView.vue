@@ -54,7 +54,7 @@ function getOrCreateModel(path: string, content: string, language: string): mona
 
   models.set(path, model)
 
-  // 为新打开的文件调用 openFile (用于 WASM 语言)
+  // 为新打开的文件调用 openFile (用于 Daemon 语言)
   intelligenceManager.openFile(path, content)
 
   return model

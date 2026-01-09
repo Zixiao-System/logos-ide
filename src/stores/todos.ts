@@ -3,17 +3,17 @@
  */
 
 import { defineStore } from 'pinia'
-import { wasmService } from '@/services/language/WasmLanguageService'
-import type { WasmTodoItem, WasmTodoKind, WasmTodoStats } from '@/types/wasm'
+import { daemonService } from '@/services/language/DaemonLanguageService'
+import type { DaemonTodoItem, DaemonTodoKind, DaemonTodoStats } from '@/types/daemon'
 
 /** TODO 项（带 URI） */
-export interface TodoItem extends WasmTodoItem {
+export interface TodoItem extends DaemonTodoItem {
   uri: string
 }
 
 /** TODO 筛选器 */
 export interface TodoFilter {
-  kinds: WasmTodoKind[]
+  kinds: DaemonTodoKind[]
   searchText: string
   filePattern: string
 }
@@ -26,7 +26,7 @@ export interface TodoState {
   /** 所有 TODO 项 */
   items: TodoItem[]
   /** 统计信息 */
-  stats: WasmTodoStats | null
+  stats: DaemonTodoStats | null
   /** 筛选器 */
   filter: TodoFilter
   /** 排序方式 */
@@ -103,7 +103,7 @@ export const useTodoStore = defineStore('todos', {
     },
 
     /** 按类型分组的 TODO 项 */
-    itemsByKind: (state): Record<WasmTodoKind, TodoItem[]> => {
+    itemsByKind: (state): Record<DaemonTodoKind, TodoItem[]> => {
       const result: Record<string, TodoItem[]> = {}
       for (const item of state.items) {
         if (!result[item.kind]) {
@@ -111,7 +111,7 @@ export const useTodoStore = defineStore('todos', {
         }
         result[item.kind].push(item)
       }
-      return result as Record<WasmTodoKind, TodoItem[]>
+      return result as Record<DaemonTodoKind, TodoItem[]>
     },
 
     /** 按文件分组的 TODO 项 */
@@ -134,7 +134,7 @@ export const useTodoStore = defineStore('todos', {
     totalCount: (state): number => state.stats?.total ?? state.items.length,
 
     /** 各类型数量 */
-    countByKind: (state): Record<WasmTodoKind, number> => {
+    countByKind: (state): Record<DaemonTodoKind, number> => {
       return state.stats?.byKind ?? {
         todo: 0,
         fixme: 0,
@@ -160,15 +160,15 @@ export const useTodoStore = defineStore('todos', {
     async refresh() {
       this.loading = true
       try {
-        // 从 WASM 服务获取所有 TODO 项
-        const items = wasmService.getAllTodoItems()
+        // 从 Daemon 服务获取所有 TODO 项
+        const items = await daemonService.getAllTodoItems()
         this.items = items.map(item => ({
           ...item,
           uri: item.uri ?? ''
         }))
 
         // 获取统计信息
-        this.stats = wasmService.getTodoStats()
+        this.stats = await daemonService.getTodoStats()
         this.lastUpdated = Date.now()
       } catch (error) {
         console.error('[TodoStore] 刷新 TODO 失败:', error)
@@ -180,10 +180,10 @@ export const useTodoStore = defineStore('todos', {
     /**
      * 更新单个文档的 TODO 项
      */
-    updateDocument(uri: string) {
+    async updateDocument(uri: string) {
       try {
         // 获取该文档的 TODO 项
-        const docItems = wasmService.getTodoItems(uri)
+        const docItems = await daemonService.getTodoItems(uri)
 
         // 移除该文档的旧项
         this.items = this.items.filter(item => item.uri !== uri)
@@ -197,7 +197,7 @@ export const useTodoStore = defineStore('todos', {
         }
 
         // 更新统计
-        this.stats = wasmService.getTodoStats()
+        this.stats = await daemonService.getTodoStats()
         this.lastUpdated = Date.now()
       } catch (error) {
         console.error('[TodoStore] 更新文档 TODO 失败:', error)
@@ -207,9 +207,9 @@ export const useTodoStore = defineStore('todos', {
     /**
      * 移除文档的 TODO 项
      */
-    removeDocument(uri: string) {
+    async removeDocument(uri: string) {
       this.items = this.items.filter(item => item.uri !== uri)
-      this.stats = wasmService.getTodoStats()
+      this.stats = await daemonService.getTodoStats()
     },
 
     /**
@@ -222,7 +222,7 @@ export const useTodoStore = defineStore('todos', {
     /**
      * 切换类型筛选
      */
-    toggleKindFilter(kind: WasmTodoKind) {
+    toggleKindFilter(kind: DaemonTodoKind) {
       const index = this.filter.kinds.indexOf(kind)
       if (index >= 0) {
         this.filter.kinds.splice(index, 1)

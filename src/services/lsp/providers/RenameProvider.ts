@@ -1,15 +1,15 @@
 /**
  * 重命名 Provider
- * 支持双路径: IPC (TypeScript/JavaScript) 和 WASM (其他语言)
+ * 支持双路径: IPC (TypeScript/JavaScript) 和 Daemon (Rust 守护进程)
  */
 
 import * as monaco from 'monaco-editor'
-import { wasmService } from '@/services/language/WasmLanguageService'
+import { daemonService } from '@/services/language/DaemonLanguageService'
 
 export class RenameProvider implements monaco.languages.RenameProvider {
-  private mode: 'ipc' | 'wasm'
+  private mode: 'ipc' | 'daemon'
 
-  constructor(mode: 'ipc' | 'wasm' = 'ipc') {
+  constructor(mode: 'ipc' | 'daemon' = 'ipc') {
     this.mode = mode
   }
 
@@ -24,8 +24,8 @@ export class RenameProvider implements monaco.languages.RenameProvider {
     const filePath = model.uri.fsPath
 
     try {
-      if (this.mode === 'wasm') {
-        return this.provideWasmRenameEdits(filePath, position, newName, token)
+      if (this.mode === 'daemon') {
+        return this.provideDaemonRenameEdits(filePath, position, newName, token)
       } else {
         return this.provideIpcRenameEdits(filePath, position, newName, token)
       }
@@ -45,8 +45,8 @@ export class RenameProvider implements monaco.languages.RenameProvider {
     const filePath = model.uri.fsPath
 
     try {
-      if (this.mode === 'wasm') {
-        return this.resolveWasmRenameLocation(filePath, position, token)
+      if (this.mode === 'daemon') {
+        return this.resolveDaemonRenameLocation(filePath, position, token)
       } else {
         return this.resolveIpcRenameLocation(filePath, position, token)
       }
@@ -97,16 +97,16 @@ export class RenameProvider implements monaco.languages.RenameProvider {
     return { edits }
   }
 
-  private provideWasmRenameEdits(
+  private async provideDaemonRenameEdits(
     filePath: string,
     position: monaco.Position,
     newName: string,
     token: monaco.CancellationToken
-  ): monaco.languages.WorkspaceEdit | null {
-    if (!wasmService.isInitialized()) return null
+  ): Promise<monaco.languages.WorkspaceEdit | null> {
+    if (!daemonService.isInitialized()) return null
 
-    // WASM 使用 0-indexed 行列号
-    const workspaceEdit = wasmService.rename(
+    // Daemon 使用 0-indexed 行列号
+    const workspaceEdit = await daemonService.rename(
       filePath,
       position.lineNumber - 1,
       position.column - 1,
@@ -164,15 +164,15 @@ export class RenameProvider implements monaco.languages.RenameProvider {
     }
   }
 
-  private resolveWasmRenameLocation(
+  private async resolveDaemonRenameLocation(
     filePath: string,
     position: monaco.Position,
     token: monaco.CancellationToken
-  ): monaco.languages.RenameLocation | null {
-    if (!wasmService.isInitialized()) return null
+  ): Promise<monaco.languages.RenameLocation | null> {
+    if (!daemonService.isInitialized()) return null
 
-    // WASM 使用 0-indexed 行列号
-    const result = wasmService.prepareRename(
+    // Daemon 使用 0-indexed 行列号
+    const result = await daemonService.prepareRename(
       filePath,
       position.lineNumber - 1,
       position.column - 1

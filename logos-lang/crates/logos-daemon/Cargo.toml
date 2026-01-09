@@ -1,13 +1,14 @@
 [package]
-name = "logos-wasm"
+name = "logos-daemon"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "WASM bindings for Logos language service"
+description = "Language service daemon for Logos IDE"
 
-[lib]
-crate-type = ["cdylib", "rlib"]
+[[bin]]
+name = "logos-daemon"
+path = "src/main.rs"
 
 [dependencies]
 logos-core.workspace = true
@@ -15,11 +16,9 @@ logos-parser.workspace = true
 logos-semantic.workspace = true
 logos-index.workspace = true
 logos-refactor.workspace = true
-wasm-bindgen.workspace = true
-js-sys.workspace = true
-web-sys.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 
-[features]
-default = []
+# Daemon-specific dependencies
+log = "0.4"
+env_logger = "0.11"

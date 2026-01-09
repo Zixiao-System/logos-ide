@@ -10,14 +10,14 @@ echo ========================================
 echo.
 
 REM Parse arguments
-set BUILD_WASM=true
+set BUILD_DAEMON=true
 set BUILD_APP=true
 set SKIP_TYPECHECK=false
 
 :parse_args
 if "%~1"=="" goto :done_args
-if "%~1"=="--skip-wasm" (
-    set BUILD_WASM=false
+if "%~1"=="--skip-daemon" (
+    set BUILD_DAEMON=false
     shift
     goto :parse_args
 )
@@ -35,7 +35,7 @@ if "%~1"=="--help" (
     echo Usage: %0 [options]
     echo.
     echo Options:
-    echo   --skip-wasm       Skip WASM build ^(use existing pkg/^)
+    echo   --skip-daemon     Skip Rust daemon build
     echo   --skip-app        Skip Electron app build
     echo   --skip-typecheck  Skip TypeScript type checking
     echo   --help            Show this help message
@@ -62,7 +62,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-if "%BUILD_WASM%"=="true" (
+if "%BUILD_DAEMON%"=="true" (
     where cargo >nul 2>&1
     if errorlevel 1 (
         echo Error: cargo is not installed
@@ -73,7 +73,7 @@ if "%BUILD_WASM%"=="true" (
 
 for /f "tokens=*" %%i in ('node --version') do echo   - Node.js: %%i
 for /f "tokens=*" %%i in ('npm --version') do echo   - npm: %%i
-if "%BUILD_WASM%"=="true" (
+if "%BUILD_DAEMON%"=="true" (
     for /f "tokens=*" %%i in ('rustc --version') do echo   - Rust: %%i
 )
 echo.
@@ -82,45 +82,27 @@ REM Install npm dependencies
 echo [2/5] Installing npm dependencies...
 call npm install
 if errorlevel 1 (
-    echo Error: npm ci failed
+    echo Error: npm install failed
     exit /b 1
 )
 echo.
 
-REM Build WASM
-if "%BUILD_WASM%"=="true" (
-    echo [3/5] Building WASM ^(logos-lang^)...
-
-    REM Check/install wasm-pack
-    where wasm-pack >nul 2>&1
-    if errorlevel 1 (
-        echo   Installing wasm-pack...
-        cargo install wasm-pack --locked
-    )
+REM Build Daemon
+if "%BUILD_DAEMON%"=="true" (
+    echo [3/5] Building Rust daemon ^(logos-daemon^)...
 
     pushd logos-lang
-
-    REM Set up WASI SDK environment if available
-    if defined WASI_SDK_PATH (
-        echo   Using WASI SDK from: %WASI_SDK_PATH%
-        set "CC_wasm32_unknown_unknown=%WASI_SDK_PATH%\bin\clang.exe"
-        set "CFLAGS_wasm32_unknown_unknown=--target=wasm32-wasi --sysroot=%WASI_SDK_PATH%\share\wasi-sysroot -fno-exceptions"
-    ) else (
-        echo   Note: WASI_SDK_PATH not set. If build fails, install WASI SDK:
-        echo         https://github.com/WebAssembly/wasi-sdk/releases
-    )
-
-    wasm-pack build crates/logos-wasm --target web --release --out-dir ../../pkg --out-name logos-lang
+    cargo build --release --package logos-daemon
     if errorlevel 1 (
-        echo Error: wasm-pack build failed
+        echo Error: cargo build failed
         popd
         exit /b 1
     )
-
     popd
-    echo   WASM build complete: pkg/
+
+    echo   Daemon build complete: logos-lang\target\release\logos-daemon.exe
 ) else (
-    echo [3/5] Skipping WASM build ^(--skip-wasm^)
+    echo [3/5] Skipping daemon build ^(--skip-daemon^)
 )
 echo.
 

@@ -1,15 +1,15 @@
 /**
  * 悬停信息 Provider
- * 支持双路径: IPC (TypeScript/JavaScript) 和 WASM (其他语言)
+ * 支持双路径: IPC (TypeScript/JavaScript) 和 Daemon (Rust 守护进程)
  */
 
 import * as monaco from 'monaco-editor'
-import { wasmService } from '@/services/language/WasmLanguageService'
+import { daemonService } from '@/services/language/DaemonLanguageService'
 
 export class HoverProvider implements monaco.languages.HoverProvider {
-  private mode: 'ipc' | 'wasm'
+  private mode: 'ipc' | 'daemon'
 
-  constructor(mode: 'ipc' | 'wasm' = 'ipc') {
+  constructor(mode: 'ipc' | 'daemon' = 'ipc') {
     this.mode = mode
   }
 
@@ -23,8 +23,8 @@ export class HoverProvider implements monaco.languages.HoverProvider {
     const filePath = model.uri.fsPath
 
     try {
-      if (this.mode === 'wasm') {
-        return this.provideWasmHover(filePath, position, token)
+      if (this.mode === 'daemon') {
+        return this.provideDaemonHover(filePath, position, token)
       } else {
         return this.provideIpcHover(filePath, position, token)
       }
@@ -67,15 +67,15 @@ export class HoverProvider implements monaco.languages.HoverProvider {
     }
   }
 
-  private provideWasmHover(
+  private async provideDaemonHover(
     filePath: string,
     position: monaco.Position,
     token: monaco.CancellationToken
-  ): monaco.languages.Hover | null {
-    if (!wasmService.isInitialized()) return null
+  ): Promise<monaco.languages.Hover | null> {
+    if (!daemonService.isInitialized()) return null
 
-    // WASM 使用 0-indexed 行列号
-    const hover = wasmService.getHover(
+    // Daemon 使用 0-indexed 行列号
+    const hover = await daemonService.getHover(
       filePath,
       position.lineNumber - 1,
       position.column - 1
@@ -85,7 +85,7 @@ export class HoverProvider implements monaco.languages.HoverProvider {
 
     if (!hover) return null
 
-    // WASM 返回的 contents 是字符串
+    // Daemon 返回的 contents 是字符串
     const contents: monaco.IMarkdownString[] = [{
       value: hover.contents,
       isTrusted: true,

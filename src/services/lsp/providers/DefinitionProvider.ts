@@ -1,15 +1,15 @@
 /**
  * 定义跳转 Provider
- * 支持双路径: IPC (TypeScript/JavaScript) 和 WASM (其他语言)
+ * 支持双路径: IPC (TypeScript/JavaScript) 和 Daemon (Rust 守护进程)
  */
 
 import * as monaco from 'monaco-editor'
-import { wasmService } from '@/services/language/WasmLanguageService'
+import { daemonService } from '@/services/language/DaemonLanguageService'
 
 export class DefinitionProvider implements monaco.languages.DefinitionProvider {
-  private mode: 'ipc' | 'wasm'
+  private mode: 'ipc' | 'daemon'
 
-  constructor(mode: 'ipc' | 'wasm' = 'ipc') {
+  constructor(mode: 'ipc' | 'daemon' = 'ipc') {
     this.mode = mode
   }
 
@@ -23,8 +23,8 @@ export class DefinitionProvider implements monaco.languages.DefinitionProvider {
     const filePath = model.uri.fsPath
 
     try {
-      if (this.mode === 'wasm') {
-        return this.provideWasmDefinition(filePath, position, token)
+      if (this.mode === 'daemon') {
+        return this.provideDaemonDefinition(filePath, position, token)
       } else {
         return this.provideIpcDefinition(filePath, position, token)
       }
@@ -58,15 +58,15 @@ export class DefinitionProvider implements monaco.languages.DefinitionProvider {
     }))
   }
 
-  private provideWasmDefinition(
+  private async provideDaemonDefinition(
     filePath: string,
     position: monaco.Position,
     token: monaco.CancellationToken
-  ): monaco.languages.Definition | null {
-    if (!wasmService.isInitialized()) return null
+  ): Promise<monaco.languages.Definition | null> {
+    if (!daemonService.isInitialized()) return null
 
-    // WASM 使用 0-indexed 行列号
-    const definition = wasmService.getDefinition(
+    // Daemon 使用 0-indexed 行列号
+    const definition = await daemonService.getDefinition(
       filePath,
       position.lineNumber - 1,
       position.column - 1

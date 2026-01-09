@@ -10,6 +10,7 @@ import { registerIntelligenceHandlers } from './services/intelligenceService'
 import { registerCommitAnalysisHandlers } from './services/commitAnalysisService'
 import { registerDebugHandlers, cleanupDebugService } from './services/debug/ipcHandlers'
 import { registerUpdateHandlers } from './services/updateService'
+import { registerLanguageDaemonHandlers, cleanupLanguageDaemon } from './services/languageDaemonHandlers'
 
 // 环境变量
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
@@ -169,6 +170,9 @@ function registerAllHandlers() {
   // ============ 自动更新 ============
   registerUpdateHandlers(getMainWindow)
 
+  // ============ 语言守护进程 ============
+  registerLanguageDaemonHandlers(getMainWindow)
+
   // ============ 遥测控制 ============
   ipcMain.handle('telemetry:enable', () => {
     enableSentry()
@@ -212,13 +216,15 @@ app.on('window-all-closed', () => {
 })
 
 // 应用退出前清理
-app.on('before-quit', () => {
+app.on('before-quit', async () => {
   // 清理文件监听器
   cleanupFileWatchers()
   // 清理终端
   cleanupTerminals()
   // 清理调试会话
   cleanupDebugService()
+  // 清理语言守护进程
+  await cleanupLanguageDaemon()
 })
 
 // 处理未捕获的异常

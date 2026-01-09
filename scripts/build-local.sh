@@ -15,14 +15,14 @@ echo "========================================"
 echo ""
 
 # Parse arguments
-BUILD_WASM=true
+BUILD_DAEMON=true
 BUILD_APP=true
 SKIP_TYPECHECK=false
 
 for arg in "$@"; do
     case $arg in
-        --skip-wasm)
-            BUILD_WASM=false
+        --skip-daemon)
+            BUILD_DAEMON=false
             shift
             ;;
         --skip-app)
@@ -37,7 +37,7 @@ for arg in "$@"; do
             echo "Usage: $0 [options]"
             echo ""
             echo "Options:"
-            echo "  --skip-wasm       Skip WASM build (use existing pkg/)"
+            echo "  --skip-daemon     Skip Rust daemon build"
             echo "  --skip-app        Skip Electron app build"
             echo "  --skip-typecheck  Skip TypeScript type checking"
             echo "  --help            Show this help message"
@@ -60,14 +60,14 @@ check_command() {
 check_command "node"
 check_command "npm"
 
-if [ "$BUILD_WASM" = true ]; then
+if [ "$BUILD_DAEMON" = true ]; then
     check_command "cargo"
     check_command "rustc"
 fi
 
 echo "  - Node.js: $(node --version)"
 echo "  - npm: $(npm --version)"
-if [ "$BUILD_WASM" = true ]; then
+if [ "$BUILD_DAEMON" = true ]; then
     echo "  - Rust: $(rustc --version)"
     echo "  - Cargo: $(cargo --version)"
 fi
@@ -78,38 +78,17 @@ echo "[2/5] Installing npm dependencies..."
 npm install
 echo ""
 
-# Build WASM
-if [ "$BUILD_WASM" = true ]; then
-    echo "[3/5] Building WASM (logos-lang)..."
-
-    # Check/install wasm-pack
-    if ! command -v wasm-pack &> /dev/null; then
-        echo "  Installing wasm-pack..."
-        cargo install wasm-pack --locked
-    fi
+# Build Daemon
+if [ "$BUILD_DAEMON" = true ]; then
+    echo "[3/5] Building Rust daemon (logos-daemon)..."
 
     cd logos-lang
-
-    # Set up WASI SDK environment if available
-    if [ -n "$WASI_SDK_PATH" ]; then
-        echo "  Using WASI SDK from: $WASI_SDK_PATH"
-        export CC_wasm32_unknown_unknown="${WASI_SDK_PATH}/bin/clang"
-        export CFLAGS_wasm32_unknown_unknown="--target=wasm32-wasi --sysroot=${WASI_SDK_PATH}/share/wasi-sysroot -fno-exceptions"
-    else
-        echo "  Note: WASI_SDK_PATH not set. If build fails, install WASI SDK:"
-        echo "        https://github.com/WebAssembly/wasi-sdk/releases"
-    fi
-
-    wasm-pack build crates/logos-wasm \
-        --target web \
-        --release \
-        --out-dir ../../pkg \
-        --out-name logos-lang
-
+    cargo build --release --package logos-daemon
     cd "$PROJECT_ROOT"
-    echo "  WASM build complete: pkg/"
+
+    echo "  Daemon build complete: logos-lang/target/release/logos-daemon"
 else
-    echo "[3/5] Skipping WASM build (--skip-wasm)"
+    echo "[3/5] Skipping daemon build (--skip-daemon)"
 fi
 echo ""
 

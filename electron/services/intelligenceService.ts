@@ -1,7 +1,7 @@
 /**
  * 代码智能服务
  * 使用 TypeScript Compiler API 提供原生智能功能
- * 其他语言支持将通过 Rust-WASM 实现 (TODO)
+ * 其他语言支持通过 Rust 守护进程 (logos-daemon) 实现
  */
 
 import { ipcMain, BrowserWindow } from 'electron'
@@ -11,7 +11,7 @@ import * as fs from 'fs'
 
 // ============ 语言配置 ============
 
-type LanguageTier = 'native' | 'wasm' | 'basic'
+type LanguageTier = 'native' | 'daemon' | 'basic'
 
 interface LanguageInfo {
   tier: LanguageTier
@@ -25,13 +25,13 @@ const LANGUAGE_MAP: Record<string, LanguageInfo> = {
   javascript: { tier: 'native', displayName: 'JavaScript', extensions: ['.js', '.jsx'] },
   typescriptreact: { tier: 'native', displayName: 'TypeScript React', extensions: ['.tsx'] },
   javascriptreact: { tier: 'native', displayName: 'JavaScript React', extensions: ['.jsx'] },
-  // 以下语言将通过 Rust-WASM 支持 (TODO)
-  python: { tier: 'wasm', displayName: 'Python', extensions: ['.py'] },
-  go: { tier: 'wasm', displayName: 'Go', extensions: ['.go'] },
-  rust: { tier: 'wasm', displayName: 'Rust', extensions: ['.rs'] },
-  c: { tier: 'wasm', displayName: 'C', extensions: ['.c', '.h'] },
-  cpp: { tier: 'wasm', displayName: 'C++', extensions: ['.cpp', '.cc', '.cxx', '.hpp', '.hxx'] },
-  java: { tier: 'wasm', displayName: 'Java', extensions: ['.java'] },
+  // 以下语言通过 Rust 守护进程 (logos-daemon) 支持
+  python: { tier: 'daemon', displayName: 'Python', extensions: ['.py'] },
+  go: { tier: 'daemon', displayName: 'Go', extensions: ['.go'] },
+  rust: { tier: 'daemon', displayName: 'Rust', extensions: ['.rs'] },
+  c: { tier: 'daemon', displayName: 'C', extensions: ['.c', '.h'] },
+  cpp: { tier: 'daemon', displayName: 'C++', extensions: ['.cpp', '.cc', '.cxx', '.hpp', '.hxx'] },
+  java: { tier: 'daemon', displayName: 'Java', extensions: ['.java'] },
 }
 
 // 扩展名到语言 ID 的映射
@@ -947,7 +947,7 @@ class IntelligenceServiceManager {
         message: `TypeScript service ready`
       })
     }
-    // TODO: Rust-WASM 语言服务将在这里初始化
+    // Daemon 语言服务由 languageDaemonService.ts 处理
   }
 
   private notifyIndexingProgress(progress: IndexingProgress): void {
@@ -965,7 +965,7 @@ class IntelligenceServiceManager {
         language: 'typescript',
         status: this.services.size > 0 ? 'ready' : 'stopped'
       }
-      // TODO: Rust-WASM 语言服务状态
+      // Daemon 语言服务状态由 languageDaemonService.ts 提供
     ]
 
     return {
@@ -990,7 +990,7 @@ class IntelligenceServiceManager {
       service.dispose()
       this.services.delete(rootPath)
     }
-    // TODO: 关闭 Rust-WASM 服务
+    // Daemon 语言服务由 languageDaemonService.ts 管理
   }
 
   getServiceForFile(filePath: string): TypeScriptLanguageService | null {
@@ -1038,7 +1038,7 @@ export function registerIntelligenceHandlers(getMainWindow: () => BrowserWindow 
         service.syncFile(filePath, content, version)
       }
     }
-    // TODO: Rust-WASM 语言服务文件同步
+    // Daemon 语言服务文件同步由 languageDaemonService.ts 处理
   })
 
   ipcMain.on('intelligence:closeFile', (_, filePath: string) => {
@@ -1048,12 +1048,12 @@ export function registerIntelligenceHandlers(getMainWindow: () => BrowserWindow 
         service.closeFile(filePath)
       }
     }
-    // TODO: Rust-WASM 语言服务文件关闭
+    // Daemon 语言服务文件关闭由 languageDaemonService.ts 处理
   })
 
   // 文件打开
   ipcMain.on('intelligence:openFile', (_, _filePath: string, _content: string) => {
-    // TODO: Rust-WASM 语言服务文件打开
+    // Daemon 语言服务文件打开由 languageDaemonService.ts 处理
   })
 
   // 补全
@@ -1063,7 +1063,7 @@ export function registerIntelligenceHandlers(getMainWindow: () => BrowserWindow 
       if (!service) return { suggestions: [] }
       return service.getCompletions(filePath, position, triggerCharacter)
     }
-    // TODO: Rust-WASM 语言服务补全
+    // Daemon 语言服务补全由 languageDaemonService.ts 处理
     return { suggestions: [] }
   })
 
@@ -1074,7 +1074,7 @@ export function registerIntelligenceHandlers(getMainWindow: () => BrowserWindow 
       if (!service) return []
       return service.getDefinitions(filePath, position)
     }
-    // TODO: Rust-WASM 语言服务定义跳转
+    // Daemon 语言服务定义跳转由 languageDaemonService.ts 处理
     return []
   })
 
@@ -1085,7 +1085,7 @@ export function registerIntelligenceHandlers(getMainWindow: () => BrowserWindow 
       if (!service) return []
       return service.getReferences(filePath, position, includeDeclaration)
     }
-    // TODO: Rust-WASM 语言服务查找引用
+    // Daemon 语言服务查找引用由 languageDaemonService.ts 处理
     return []
   })
 
@@ -1096,7 +1096,7 @@ export function registerIntelligenceHandlers(getMainWindow: () => BrowserWindow 
       if (!service) return []
       return service.getDiagnostics(filePath)
     }
-    // TODO: Rust-WASM 语言服务诊断
+    // Daemon 语言服务诊断由 languageDaemonService.ts 处理
     return []
   })
 
@@ -1107,7 +1107,7 @@ export function registerIntelligenceHandlers(getMainWindow: () => BrowserWindow 
       if (!service) return null
       return service.getHover(filePath, position)
     }
-    // TODO: Rust-WASM 语言服务悬停信息
+    // Daemon 语言服务悬停信息由 languageDaemonService.ts 处理
     return null
   })
 
@@ -1151,7 +1151,7 @@ export function registerIntelligenceHandlers(getMainWindow: () => BrowserWindow 
       if (!service) return null
       return service.rename(filePath, position, newName)
     }
-    // TODO: Rust-WASM 语言服务重命名
+    // Daemon 语言服务重命名由 languageDaemonService.ts 处理
     return null
   })
 
@@ -1188,13 +1188,13 @@ export function registerIntelligenceHandlers(getMainWindow: () => BrowserWindow 
       }
     }
 
-    // WASM 支持的语言 (TODO)
+    // Daemon 支持的语言
     const langInfo = LANGUAGE_MAP[language]
-    if (langInfo?.tier === 'wasm') {
+    if (langInfo?.tier === 'daemon') {
       return {
         language,
-        status: 'stopped' as const,
-        message: `${langInfo.displayName} support coming soon (Rust-WASM)`
+        status: 'ready' as const,
+        message: `${langInfo.displayName} support via logos-daemon`
       }
     }
 

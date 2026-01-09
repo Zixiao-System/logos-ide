@@ -1,15 +1,15 @@
 /**
  * 引用查找 Provider
- * 支持双路径: IPC (TypeScript/JavaScript) 和 WASM (其他语言)
+ * 支持双路径: IPC (TypeScript/JavaScript) 和 Daemon (Rust 守护进程)
  */
 
 import * as monaco from 'monaco-editor'
-import { wasmService } from '@/services/language/WasmLanguageService'
+import { daemonService } from '@/services/language/DaemonLanguageService'
 
 export class ReferenceProvider implements monaco.languages.ReferenceProvider {
-  private mode: 'ipc' | 'wasm'
+  private mode: 'ipc' | 'daemon'
 
-  constructor(mode: 'ipc' | 'wasm' = 'ipc') {
+  constructor(mode: 'ipc' | 'daemon' = 'ipc') {
     this.mode = mode
   }
 
@@ -24,8 +24,8 @@ export class ReferenceProvider implements monaco.languages.ReferenceProvider {
     const filePath = model.uri.fsPath
 
     try {
-      if (this.mode === 'wasm') {
-        return this.provideWasmReferences(filePath, position, token)
+      if (this.mode === 'daemon') {
+        return this.provideDaemonReferences(filePath, position, token)
       } else {
         return this.provideIpcReferences(filePath, position, context, token)
       }
@@ -64,15 +64,15 @@ export class ReferenceProvider implements monaco.languages.ReferenceProvider {
     }))
   }
 
-  private provideWasmReferences(
+  private async provideDaemonReferences(
     filePath: string,
     position: monaco.Position,
     token: monaco.CancellationToken
-  ): monaco.languages.Location[] | null {
-    if (!wasmService.isInitialized()) return null
+  ): Promise<monaco.languages.Location[] | null> {
+    if (!daemonService.isInitialized()) return null
 
-    // WASM 使用 0-indexed 行列号
-    const references = wasmService.getReferences(
+    // Daemon 使用 0-indexed 行列号
+    const references = await daemonService.getReferences(
       filePath,
       position.lineNumber - 1,
       position.column - 1

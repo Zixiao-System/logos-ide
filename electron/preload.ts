@@ -1271,6 +1271,126 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('updater:status', handler)
       return () => ipcRenderer.removeListener('updater:status', handler)
     }
+  },
+
+  // ============ 语言守护进程 ============
+  daemon: {
+    // 生命周期
+    start: (): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke('daemon:start'),
+
+    stop: (): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke('daemon:stop'),
+
+    isRunning: (): Promise<boolean> =>
+      ipcRenderer.invoke('daemon:isRunning'),
+
+    // 文档管理
+    openDocument: (uri: string, content: string, languageId: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke('daemon:openDocument', uri, content, languageId),
+
+    updateDocument: (uri: string, content: string): void =>
+      ipcRenderer.send('daemon:updateDocument', uri, content),
+
+    closeDocument: (uri: string): void =>
+      ipcRenderer.send('daemon:closeDocument', uri),
+
+    // 代码智能
+    completions: (uri: string, line: number, column: number): Promise<unknown> =>
+      ipcRenderer.invoke('daemon:completions', uri, line, column),
+
+    definition: (uri: string, line: number, column: number): Promise<unknown> =>
+      ipcRenderer.invoke('daemon:definition', uri, line, column),
+
+    references: (uri: string, line: number, column: number): Promise<unknown> =>
+      ipcRenderer.invoke('daemon:references', uri, line, column),
+
+    hover: (uri: string, line: number, column: number): Promise<unknown> =>
+      ipcRenderer.invoke('daemon:hover', uri, line, column),
+
+    documentSymbols: (uri: string): Promise<unknown> =>
+      ipcRenderer.invoke('daemon:documentSymbols', uri),
+
+    searchSymbols: (query: string): Promise<unknown> =>
+      ipcRenderer.invoke('daemon:searchSymbols', query),
+
+    diagnostics: (uri: string): Promise<unknown> =>
+      ipcRenderer.invoke('daemon:diagnostics', uri),
+
+    // 重命名
+    prepareRename: (uri: string, line: number, column: number): Promise<unknown> =>
+      ipcRenderer.invoke('daemon:prepareRename', uri, line, column),
+
+    rename: (uri: string, line: number, column: number, newName: string): Promise<unknown> =>
+      ipcRenderer.invoke('daemon:rename', uri, line, column, newName),
+
+    // 重构
+    getRefactorActions: (
+      uri: string,
+      startLine: number,
+      startCol: number,
+      endLine: number,
+      endCol: number
+    ): Promise<unknown> =>
+      ipcRenderer.invoke('daemon:getRefactorActions', uri, startLine, startCol, endLine, endCol),
+
+    extractVariable: (
+      uri: string,
+      startLine: number,
+      startCol: number,
+      endLine: number,
+      endCol: number,
+      variableName: string
+    ): Promise<unknown> =>
+      ipcRenderer.invoke('daemon:extractVariable', uri, startLine, startCol, endLine, endCol, variableName),
+
+    extractMethod: (
+      uri: string,
+      startLine: number,
+      startCol: number,
+      endLine: number,
+      endCol: number,
+      methodName: string
+    ): Promise<unknown> =>
+      ipcRenderer.invoke('daemon:extractMethod', uri, startLine, startCol, endLine, endCol, methodName),
+
+    canSafeDelete: (
+      uri: string,
+      startLine: number,
+      startCol: number,
+      endLine: number,
+      endCol: number
+    ): Promise<unknown> =>
+      ipcRenderer.invoke('daemon:canSafeDelete', uri, startLine, startCol, endLine, endCol),
+
+    safeDelete: (
+      uri: string,
+      startLine: number,
+      startCol: number,
+      endLine: number,
+      endCol: number
+    ): Promise<unknown> =>
+      ipcRenderer.invoke('daemon:safeDelete', uri, startLine, startCol, endLine, endCol),
+
+    // 分析
+    getTodoItems: (uri: string): Promise<unknown> =>
+      ipcRenderer.invoke('daemon:getTodoItems', uri),
+
+    getAllTodoItems: (): Promise<unknown> =>
+      ipcRenderer.invoke('daemon:getAllTodoItems'),
+
+    getTodoStats: (): Promise<unknown> =>
+      ipcRenderer.invoke('daemon:getTodoStats'),
+
+    getUnusedSymbols: (uri: string): Promise<unknown> =>
+      ipcRenderer.invoke('daemon:getUnusedSymbols', uri),
+
+    // 事件
+    onDiagnostics: (callback: (params: unknown) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, params: unknown) => callback(params)
+      ipcRenderer.on('daemon:diagnostics', handler)
+      return () => ipcRenderer.removeListener('daemon:diagnostics', handler)
+    }
   }
 })
 
@@ -1636,6 +1756,48 @@ declare global {
         getStatus: () => Promise<UpdateState>
         setAutoDownload: (enabled: boolean) => Promise<{ success: boolean }>
         onStatus: (callback: (state: UpdateState) => void) => () => void
+      }
+
+      // 语言守护进程
+      daemon: {
+        // 生命周期
+        start: () => Promise<{ success: boolean; error?: string }>
+        stop: () => Promise<{ success: boolean; error?: string }>
+        isRunning: () => Promise<boolean>
+
+        // 文档管理
+        openDocument: (uri: string, content: string, languageId: string) => Promise<{ success: boolean; error?: string }>
+        updateDocument: (uri: string, content: string) => void
+        closeDocument: (uri: string) => void
+
+        // 代码智能
+        completions: (uri: string, line: number, column: number) => Promise<unknown>
+        definition: (uri: string, line: number, column: number) => Promise<unknown>
+        references: (uri: string, line: number, column: number) => Promise<unknown>
+        hover: (uri: string, line: number, column: number) => Promise<unknown>
+        documentSymbols: (uri: string) => Promise<unknown>
+        searchSymbols: (query: string) => Promise<unknown>
+        diagnostics: (uri: string) => Promise<unknown>
+
+        // 重命名
+        prepareRename: (uri: string, line: number, column: number) => Promise<unknown>
+        rename: (uri: string, line: number, column: number, newName: string) => Promise<unknown>
+
+        // 重构
+        getRefactorActions: (uri: string, startLine: number, startCol: number, endLine: number, endCol: number) => Promise<unknown>
+        extractVariable: (uri: string, startLine: number, startCol: number, endLine: number, endCol: number, variableName: string) => Promise<unknown>
+        extractMethod: (uri: string, startLine: number, startCol: number, endLine: number, endCol: number, methodName: string) => Promise<unknown>
+        canSafeDelete: (uri: string, startLine: number, startCol: number, endLine: number, endCol: number) => Promise<unknown>
+        safeDelete: (uri: string, startLine: number, startCol: number, endLine: number, endCol: number) => Promise<unknown>
+
+        // 分析
+        getTodoItems: (uri: string) => Promise<unknown>
+        getAllTodoItems: () => Promise<unknown>
+        getTodoStats: () => Promise<unknown>
+        getUnusedSymbols: (uri: string) => Promise<unknown>
+
+        // 事件
+        onDiagnostics: (callback: (params: unknown) => void) => () => void
       }
     }
   }

@@ -1,7 +1,7 @@
 /**
  * 代码智能管理器
  * 负责管理 Monaco Editor 的代码智能功能
- * 支持双路径: TypeScript/JavaScript 使用 IPC, 其他语言使用 WASM
+ * 支持双路径: TypeScript/JavaScript 使用 IPC, 其他语言使用 Daemon (Rust 守护进程)
  */
 
 import * as monaco from 'monaco-editor'
@@ -13,8 +13,8 @@ import { SignatureHelpProvider } from './providers/SignatureHelpProvider.ts'
 import { RenameProvider } from './providers/RenameProvider.ts'
 import { InlayHintsProvider } from './providers/InlayHintsProvider.ts'
 import { DiagnosticsManager } from './DiagnosticsManager.ts'
-import { wasmService } from '@/services/language/WasmLanguageService.ts'
-import { isWasmLanguage, isNativeLanguage } from '@/services/language/utils.ts'
+import { daemonService } from '@/services/language/DaemonLanguageService.ts'
+import { isDaemonLanguage, isNativeLanguage } from '@/services/language/utils.ts'
 import type { LanguageServerStatus } from '@/types/intelligence.ts'
 
 /** 支持的 Tier 1 语言 (TypeScript Language Service via IPC) */
@@ -25,8 +25,8 @@ const TIER1_LANGUAGES = [
   'javascriptreact',
 ]
 
-/** WASM 支持的语言 (Monaco 语言 ID) */
-const WASM_MONACO_LANGUAGES = [
+/** Daemon 支持的语言 (Monaco 语言 ID) */
+const DAEMON_MONACO_LANGUAGES = [
   'python',
   'go',
   'rust',
@@ -45,7 +45,7 @@ const EXT_TO_LANGUAGE: Record<string, string> = {
   '.cjs': 'javascript',
   '.mts': 'typescript',
   '.cts': 'typescript',
-  // WASM 语言
+  // Daemon 支持的语言
   '.py': 'python',
   '.pyw': 'python',
   '.go': 'go',
@@ -67,7 +67,7 @@ export class IntelligenceManager {
   private projectRoot: string | null = null
   private fileVersions: Map<string, number> = new Map()
   private statusListenerCleanup: (() => void) | null = null
-  private wasmInitialized = false
+  private daemonInitialized = false
 
   constructor() {
     this.diagnosticsManager = new DiagnosticsManager()
@@ -87,29 +87,28 @@ export class IntelligenceManager {
       this.handleServerStatusChange.bind(this)
     )
 
-    // 异步初始化 WASM 服务 (失败不影响主流程)
-    this.initializeWasm().catch(error => {
-      console.warn('[IntelligenceManager] WASM 初始化跳过:', error?.message || error)
+    // 初始化 Daemon 服务
+    this.initializeDaemon().catch(error => {
+      console.warn('[IntelligenceManager] Daemon 初始化跳过:', error?.message || error)
     })
   }
 
   /**
-   * 异步初始化 WASM 服务
+   * 异步初始化 Daemon 服务
    */
-  private async initializeWasm(): Promise<void> {
+  private async initializeDaemon(): Promise<void> {
     try {
-      await wasmService.initialize()
-      this.wasmInitialized = true
-      console.log('[IntelligenceManager] WASM 服务初始化成功')
+      await daemonService.initialize()
+      this.daemonInitialized = true
+      console.log('[IntelligenceManager] Daemon 服务初始化成功')
 
-      // 为 WASM 语言注册 Provider
-      for (const languageId of WASM_MONACO_LANGUAGES) {
-        this.registerProvidersForLanguage(languageId, 'wasm')
+      // 为 Daemon 语言注册 Provider
+      for (const languageId of DAEMON_MONACO_LANGUAGES) {
+        this.registerProvidersForLanguage(languageId, 'daemon')
       }
     } catch (error) {
-      console.error('[IntelligenceManager] WASM 服务初始化失败:', error)
-      this.wasmInitialized = false
-      // 不抛出错误，让应用继续运行
+      console.error('[IntelligenceManager] Daemon 服务初始化失败:', error)
+      this.daemonInitialized = false
     }
   }
 
@@ -134,9 +133,9 @@ export class IntelligenceManager {
   /**
    * 为指定语言注册所有 Provider
    * @param languageId Monaco 语言 ID
-   * @param mode 服务模式: 'ipc' 使用 IPC 通信, 'wasm' 使用 WASM
+   * @param mode 服务模式: 'ipc' 使用 IPC 通信, 'daemon' 使用 Rust 守护进程
    */
-  private registerProvidersForLanguage(languageId: string, mode: 'ipc' | 'wasm'): void {
+  private registerProvidersForLanguage(languageId: string, mode: 'ipc' | 'daemon'): void {
     // 补全 Provider
     this.disposables.push(
       monaco.languages.registerCompletionItemProvider(
@@ -206,9 +205,10 @@ export class IntelligenceManager {
     if (!this.isSupported(filePath)) return
 
     // 判断使用哪种服务
-    if (this.isWasmLanguage(filePath) && this.wasmInitialized) {
-      // WASM 语言: 直接同步到 WASM 服务
-      wasmService.updateDocument(filePath, content)
+    if (this.isDaemonLanguage(filePath)) {
+      if (this.daemonInitialized) {
+        daemonService.updateDocument(filePath, content)
+      }
     } else if (this.isNativeLanguage(filePath)) {
       // 原生语言: 通过 IPC 同步
       const currentVersion = this.fileVersions.get(filePath) || 0
@@ -219,15 +219,15 @@ export class IntelligenceManager {
   }
 
   /**
-   * 打开文件 (用于 WASM 语言)
+   * 打开文件 (用于 Daemon 语言)
    */
   openFile(filePath: string, content: string): void {
     if (!this.isSupported(filePath)) return
 
-    if (this.isWasmLanguage(filePath) && this.wasmInitialized) {
+    if (this.isDaemonLanguage(filePath) && this.daemonInitialized) {
       const ext = filePath.substring(filePath.lastIndexOf('.'))
       const languageId = EXT_TO_LANGUAGE[ext] || 'plaintext'
-      wasmService.openDocument(filePath, content, languageId)
+      daemonService.openDocument(filePath, content, languageId)
     }
   }
 
@@ -237,8 +237,10 @@ export class IntelligenceManager {
   closeFile(filePath: string): void {
     this.fileVersions.delete(filePath)
 
-    if (this.isWasmLanguage(filePath) && this.wasmInitialized) {
-      wasmService.closeDocument(filePath)
+    if (this.isDaemonLanguage(filePath)) {
+      if (this.daemonInitialized) {
+        daemonService.closeDocument(filePath)
+      }
     } else {
       window.electronAPI.intelligence.closeFile(filePath)
     }
@@ -252,19 +254,21 @@ export class IntelligenceManager {
     if (!this.isSupported(filePath)) return
 
     try {
-      if (this.isWasmLanguage(filePath) && this.wasmInitialized) {
-        // WASM 语言诊断
-        const diagnostics = wasmService.getDiagnostics(filePath)
-        // 转换为 Monaco 格式
-        const converted = diagnostics.map(d => ({
-          range: {
-            start: { line: d.range.startLine, column: d.range.startColumn },
-            end: { line: d.range.endLine, column: d.range.endColumn }
-          },
-          message: d.message,
-          severity: d.severity
-        }))
-        this.diagnosticsManager.setDiagnostics(model, converted)
+      if (this.isDaemonLanguage(filePath)) {
+        if (this.daemonInitialized) {
+          // 使用 Daemon 获取诊断
+          const diagnostics = await daemonService.getDiagnostics(filePath)
+          // 转换为 Monaco 格式
+          const converted = diagnostics.map(d => ({
+            range: {
+              start: { line: d.range.startLine, column: d.range.startColumn },
+              end: { line: d.range.endLine, column: d.range.endColumn }
+            },
+            message: d.message,
+            severity: d.severity
+          }))
+          this.diagnosticsManager.setDiagnostics(model, converted)
+        }
       } else {
         // IPC 语言诊断
         const diagnostics = await window.electronAPI.intelligence.getDiagnostics(filePath)
@@ -284,10 +288,10 @@ export class IntelligenceManager {
   }
 
   /**
-   * 检查文件是否是 WASM 语言
+   * 检查文件是否是 Daemon 语言
    */
-  isWasmLanguage(filePath: string): boolean {
-    return isWasmLanguage(filePath)
+  isDaemonLanguage(filePath: string): boolean {
+    return isDaemonLanguage(filePath)
   }
 
   /**
@@ -298,10 +302,10 @@ export class IntelligenceManager {
   }
 
   /**
-   * 获取 WASM 服务实例 (供 Provider 使用)
+   * 获取 Daemon 服务实例 (供 Provider 使用)
    */
-  getWasmService() {
-    return this.wasmInitialized ? wasmService : null
+  getDaemonService() {
+    return this.daemonInitialized ? daemonService : null
   }
 
   /**
@@ -343,10 +347,10 @@ export class IntelligenceManager {
       this.statusListenerCleanup = null
     }
 
-    // 清理 WASM 服务
-    if (this.wasmInitialized) {
-      wasmService.dispose()
-      this.wasmInitialized = false
+    // 清理 Daemon 服务
+    if (this.daemonInitialized) {
+      daemonService.dispose()
+      this.daemonInitialized = false
     }
 
     // 关闭项目

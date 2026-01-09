@@ -1,10 +1,10 @@
 /**
  * 语言检测工具
- * 用于判断文件应该使用哪个语言服务 (WASM vs IPC)
+ * 用于判断文件应该使用哪个语言服务 (Daemon vs IPC)
  */
 
-import { WASM_EXTENSION_MAP, WASM_SUPPORTED_LANGUAGES } from '@/types/wasm'
-import type { WasmSupportedLanguage } from '@/types/wasm'
+import { DAEMON_EXTENSION_MAP, DAEMON_SUPPORTED_LANGUAGES } from '@/types/daemon'
+import type { DaemonSupportedLanguage } from '@/types/daemon'
 
 /**
  * 获取文件扩展名 (不依赖 Node.js path 模块)
@@ -16,11 +16,11 @@ function getExtension(filePath: string): string {
 }
 
 /**
- * 判断文件是否应使用 WASM 语言服务
+ * 判断文件是否应使用 Daemon 语言服务
  */
-export function isWasmLanguage(filePath: string): boolean {
+export function isDaemonLanguage(filePath: string): boolean {
   const ext = getExtension(filePath)
-  return ext in WASM_EXTENSION_MAP
+  return ext in DAEMON_EXTENSION_MAP
 }
 
 /**
@@ -38,9 +38,9 @@ export function isNativeLanguage(filePath: string): boolean {
 export function getLanguageId(filePath: string): string {
   const ext = getExtension(filePath)
 
-  // WASM 语言
-  if (ext in WASM_EXTENSION_MAP) {
-    return WASM_EXTENSION_MAP[ext]
+  // Daemon 语言
+  if (ext in DAEMON_EXTENSION_MAP) {
+    return DAEMON_EXTENSION_MAP[ext]
   }
 
   // 原生 TypeScript/JavaScript 语言
@@ -66,24 +66,24 @@ export function getLanguageId(filePath: string): string {
 /**
  * 获取语言服务类型
  */
-export function getLanguageServiceType(filePath: string): 'wasm' | 'native' | 'none' {
-  if (isWasmLanguage(filePath)) return 'wasm'
+export function getLanguageServiceType(filePath: string): 'daemon' | 'native' | 'none' {
+  if (isDaemonLanguage(filePath)) return 'daemon'
   if (isNativeLanguage(filePath)) return 'native'
   return 'none'
 }
 
 /**
- * 获取所有 WASM 支持的语言列表
+ * 获取所有 Daemon 支持的语言列表
  */
-export function getWasmSupportedLanguages(): readonly WasmSupportedLanguage[] {
-  return WASM_SUPPORTED_LANGUAGES
+export function getDaemonSupportedLanguages(): readonly DaemonSupportedLanguage[] {
+  return DAEMON_SUPPORTED_LANGUAGES
 }
 
 /**
- * Monaco 语言 ID 到 WASM 语言 ID 的映射
+ * Monaco 语言 ID 到 Daemon 语言 ID 的映射
  */
-export function monacoLanguageToWasm(monacoLanguage: string): string | null {
-  const mapping: Record<string, WasmSupportedLanguage> = {
+export function monacoLanguageToDaemon(monacoLanguage: string): string | null {
+  const mapping: Record<string, DaemonSupportedLanguage> = {
     'python': 'python',
     'go': 'go',
     'rust': 'rust',

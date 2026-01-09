@@ -6,7 +6,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useTodoStore, type TodoItem } from '@/stores/todos'
 import { useEditorStore } from '@/stores/editor'
-import type { WasmTodoKind } from '@/types/wasm'
+import type { DaemonTodoKind } from '@/types/daemon'
 
 // 导入 MDUI 图标
 import '@mdui/icons/refresh.js'
@@ -33,7 +33,7 @@ const groupBy = ref<'file' | 'kind'>('file')
 const expandedGroups = ref<Set<string>>(new Set())
 
 // TODO 类型配置
-const kindConfig: Record<WasmTodoKind, { label: string; color: string; icon: string }> = {
+const kindConfig: Record<DaemonTodoKind, { label: string; color: string; icon: string }> = {
   todo: { label: 'TODO', color: '#4CAF50', icon: 'checklist' },
   fixme: { label: 'FIXME', color: '#F44336', icon: 'warning' },
   bug: { label: 'BUG', color: '#F44336', icon: 'bug-report' },
@@ -110,7 +110,7 @@ const handleRefresh = () => {
 }
 
 // 切换类型筛选
-const toggleKindFilter = (kind: WasmTodoKind) => {
+const toggleKindFilter = (kind: DaemonTodoKind) => {
   todoStore.toggleKindFilter(kind)
 }
 
@@ -187,8 +187,8 @@ watch(groupedItems, (newGroups) => {
           <span class="group-title" v-if="groupBy === 'file'">
             {{ getFileName(key) }}
           </span>
-          <span class="group-title" v-else :style="{ color: kindConfig[key as WasmTodoKind]?.color }">
-            {{ kindConfig[key as WasmTodoKind]?.label || key }}
+          <span class="group-title" v-else :style="{ color: kindConfig[key as DaemonTodoKind]?.color }">
+            {{ kindConfig[key as DaemonTodoKind]?.label || key }}
           </span>
           <span class="group-count">{{ items.length }}</span>
         </div>
