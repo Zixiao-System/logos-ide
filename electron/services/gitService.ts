@@ -249,8 +249,8 @@ export function registerGitHandlers(): void {
 
   // 提交
   ipcMain.handle('git:commit', async (_, repoPath: string, message: string) => {
-    // 转义引号
-    const escapedMessage = message.replace(/"/g, '\\"')
+    // 转义反斜杠和引号，防止破坏 shell 字符串
+    const escapedMessage = message.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
     await execGit(repoPath, `commit -m "${escapedMessage}"`)
   })
 
