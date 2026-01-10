@@ -39,8 +39,12 @@
     "electron-updater": "^6.7.3",
     "mdui": "^2.0.0",
     "monaco-editor": "^0.47.0",
+    "monaco-languageclient": "^8.8.3",
     "node-pty": "^1.0.0",
     "pinia": "^2.1.7",
+    "vscode-languageclient": "^9.0.1",
+    "vscode-languageserver-protocol": "^3.17.5",
+    "vscode-jsonrpc": "^8.2.1",
     "vue": "^3.4.21",
     "vue-router": "^4.3.0"
   },

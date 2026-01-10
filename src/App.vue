@@ -12,6 +12,7 @@ import { BottomPanel } from '@/components/BottomPanel'
 import TodoPanel from '@/components/Analysis/TodoPanel.vue'
 import CommitAnalysisPanel from '@/components/Analysis/CommitAnalysisPanel.vue'
 import TelemetryConsentDialog from '@/components/TelemetryConsentDialog.vue'
+import LSPSetupDialog from '@/components/LSPSetupDialog.vue'
 import FeedbackReportDialog from '@/components/FeedbackReportDialog.vue'
 import { DebugSidebarPanel } from '@/components/Debug'
 import type { IndexingProgress, LanguageServerStatus } from '@/types/intelligence'
@@ -378,6 +379,9 @@ onUnmounted(() => {
 
     <!-- 遥测同意对话框 (首次启动显示) -->
     <TelemetryConsentDialog />
+
+    <!-- LSP 设置对话框 (遥测同意后显示) -->
+    <LSPSetupDialog />
 
     <!-- 反馈上报对话框 (Cmd/Ctrl + Shift + F 触发) -->
     <FeedbackReportDialog ref="feedbackDialogRef" />

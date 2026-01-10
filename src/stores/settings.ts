@@ -4,8 +4,8 @@
  */
 
 import { defineStore } from 'pinia'
-import type { AppSettings, EditorSettings, DevOpsSettings, CICDProvider, TelemetrySettings } from '@/types/settings'
-import { DEFAULT_APP_SETTINGS, DEFAULT_EDITOR_SETTINGS, DEFAULT_DEVOPS_SETTINGS, DEFAULT_TELEMETRY_SETTINGS } from '@/types/settings'
+import type { AppSettings, EditorSettings, DevOpsSettings, CICDProvider, TelemetrySettings, LSPSettings } from '@/types/settings'
+import { DEFAULT_APP_SETTINGS, DEFAULT_EDITOR_SETTINGS, DEFAULT_DEVOPS_SETTINGS, DEFAULT_TELEMETRY_SETTINGS, DEFAULT_LSP_SETTINGS } from '@/types/settings'
 
 // localStorage 键名
 const SETTINGS_STORAGE_KEY = 'lsp-ide-settings'
@@ -61,6 +61,20 @@ export const useSettingsStore = defineStore('settings', {
      */
     isTelemetryEnabled: (state): boolean => {
       return state.telemetry.enabled
+    },
+
+    /**
+     * 是否需要显示 LSP Setup 提示 (遥测弹窗后)
+     */
+    shouldShowLSPSetup: (state): boolean => {
+      return state.telemetry.hasAsked && !state.lsp.hasShownSetup
+    },
+
+    /**
+     * 当前 LSP 模式
+     */
+    lspMode: (state): 'basic' | 'smart' => {
+      return state.lsp.mode
     }
   },
 
@@ -87,6 +101,9 @@ export const useSettingsStore = defineStore('settings', {
           if (parsed.telemetry) {
             this.telemetry = { ...DEFAULT_TELEMETRY_SETTINGS, ...parsed.telemetry }
           }
+          if (parsed.lsp) {
+            this.lsp = { ...DEFAULT_LSP_SETTINGS, ...parsed.lsp }
+          }
         }
       } catch (error) {
         console.error('Failed to load settings:', error)
@@ -103,7 +120,8 @@ export const useSettingsStore = defineStore('settings', {
         const settings: AppSettings = {
           editor: this.editor,
           devops: this.devops,
-          telemetry: this.telemetry
+          telemetry: this.telemetry,
+          lsp: this.lsp
         }
         localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings))
       } catch (error) {
@@ -203,6 +221,30 @@ export const useSettingsStore = defineStore('settings', {
      */
     toggleTelemetry() {
       this.telemetry.enabled = !this.telemetry.enabled
+      this.save()
+    },
+
+    /**
+     * 标记 LSP Setup 已显示
+     */
+    dismissLSPSetup() {
+      this.lsp.hasShownSetup = true
+      this.save()
+    },
+
+    /**
+     * 设置 LSP 模式
+     */
+    setLSPMode(mode: 'basic' | 'smart') {
+      this.lsp.mode = mode
+      this.save()
+    },
+
+    /**
+     * 更新 LSP 设置
+     */
+    updateLSP(settings: Partial<LSPSettings>) {
+      this.lsp = { ...this.lsp, ...settings }
       this.save()
     }
   }

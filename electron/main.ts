@@ -11,6 +11,7 @@ import { registerCommitAnalysisHandlers } from './services/commitAnalysisService
 import { registerDebugHandlers, cleanupDebugService } from './services/debug/ipcHandlers'
 import { registerUpdateHandlers } from './services/updateService'
 import { registerLanguageDaemonHandlers, cleanupLanguageDaemon } from './services/languageDaemonHandlers'
+import { registerLSPHandlers, getLSPServerManager } from './services/lspServerManager'
 
 // 环境变量
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
@@ -173,6 +174,9 @@ function registerAllHandlers() {
   // ============ 语言守护进程 ============
   registerLanguageDaemonHandlers(getMainWindow)
 
+  // ============ LSP 服务器 (Basic Mode) ============
+  registerLSPHandlers(mainWindow)
+
   // ============ 遥测控制 ============
   ipcMain.handle('telemetry:enable', () => {
     enableSentry()
@@ -225,6 +229,7 @@ app.on('before-quit', async () => {
   cleanupDebugService()
   // 清理语言守护进程
   await cleanupLanguageDaemon()
+  await getLSPServerManager().stopAll()
 })
 
 // 处理未捕获的异常

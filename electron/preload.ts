@@ -1273,6 +1273,60 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }
   },
 
+  // ============ LSP (Basic Mode) ============
+  lsp: {
+    // 服务器管理
+    start: (languageId: string): Promise<boolean> =>
+      ipcRenderer.invoke('lsp:start', languageId),
+
+    stop: (languageId: string): Promise<void> =>
+      ipcRenderer.invoke('lsp:stop', languageId),
+
+    stopAll: (): Promise<void> =>
+      ipcRenderer.invoke('lsp:stopAll'),
+
+    getStatus: (languageId: string): Promise<string> =>
+      ipcRenderer.invoke('lsp:getStatus', languageId),
+
+    setProjectRoot: (rootPath: string): Promise<void> =>
+      ipcRenderer.invoke('lsp:setProjectRoot', rootPath),
+
+    getLanguageId: (filePath: string): Promise<string | null> =>
+      ipcRenderer.invoke('lsp:getLanguageId', filePath),
+
+    // LSP 请求/通知
+    request: (languageId: string, method: string, params: unknown): Promise<unknown> =>
+      ipcRenderer.invoke('lsp:request', languageId, method, params),
+
+    notify: (languageId: string, method: string, params: unknown): Promise<void> =>
+      ipcRenderer.invoke('lsp:notify', languageId, method, params),
+
+    // 事件监听
+    onDiagnostics: (callback: (data: { languageId: string; params: unknown }) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, data: { languageId: string; params: unknown }) => callback(data)
+      ipcRenderer.on('lsp:diagnostics', handler)
+      return () => ipcRenderer.removeListener('lsp:diagnostics', handler)
+    },
+
+    onStatus: (callback: (data: { languageId: string; status: string; message?: string }) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, data: { languageId: string; status: string; message?: string }) => callback(data)
+      ipcRenderer.on('lsp:status', handler)
+      return () => ipcRenderer.removeListener('lsp:status', handler)
+    },
+
+    onProgress: (callback: (data: { languageId: string; params: unknown }) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, data: { languageId: string; params: unknown }) => callback(data)
+      ipcRenderer.on('lsp:progress', handler)
+      return () => ipcRenderer.removeListener('lsp:progress', handler)
+    },
+
+    onNotification: (callback: (data: { languageId: string; method: string; params: unknown }) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, data: { languageId: string; method: string; params: unknown }) => callback(data)
+      ipcRenderer.on('lsp:notification', handler)
+      return () => ipcRenderer.removeListener('lsp:notification', handler)
+    }
+  },
+
   // ============ 语言守护进程 ============
   daemon: {
     // 生命周期
@@ -1756,6 +1810,22 @@ declare global {
         getStatus: () => Promise<UpdateState>
         setAutoDownload: (enabled: boolean) => Promise<{ success: boolean }>
         onStatus: (callback: (state: UpdateState) => void) => () => void
+      }
+
+      // LSP (Basic Mode)
+      lsp: {
+        start: (languageId: string) => Promise<boolean>
+        stop: (languageId: string) => Promise<void>
+        stopAll: () => Promise<void>
+        getStatus: (languageId: string) => Promise<string>
+        setProjectRoot: (rootPath: string) => Promise<void>
+        getLanguageId: (filePath: string) => Promise<string | null>
+        request: (languageId: string, method: string, params: unknown) => Promise<unknown>
+        notify: (languageId: string, method: string, params: unknown) => Promise<void>
+        onDiagnostics: (callback: (data: { languageId: string; params: unknown }) => void) => () => void
+        onStatus: (callback: (data: { languageId: string; status: string; message?: string }) => void) => () => void
+        onProgress: (callback: (data: { languageId: string; params: unknown }) => void) => () => void
+        onNotification: (callback: (data: { languageId: string; method: string; params: unknown }) => void) => () => void
       }
 
       // 语言守护进程

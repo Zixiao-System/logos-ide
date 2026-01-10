@@ -45,6 +45,14 @@ export interface TelemetrySettings {
   enabled: boolean
 }
 
+/** LSP 设置 */
+export interface LSPSettings {
+  /** 是否已显示过 LSP Setup 提示 */
+  hasShownSetup: boolean
+  /** 智能模式: basic (标准 LSP) 或 smart (全量索引) */
+  mode: 'basic' | 'smart'
+}
+
 /** 应用设置 */
 export interface AppSettings {
   /** 编辑器设置 */
@@ -53,6 +61,8 @@ export interface AppSettings {
   devops: DevOpsSettings
   /** 遥测设置 */
   telemetry: TelemetrySettings
+  /** LSP 设置 */
+  lsp: LSPSettings
 }
 
 /** 默认编辑器设置 */
@@ -80,11 +90,18 @@ export const DEFAULT_TELEMETRY_SETTINGS: TelemetrySettings = {
   enabled: false
 }
 
+/** 默认 LSP 设置 */
+export const DEFAULT_LSP_SETTINGS: LSPSettings = {
+  hasShownSetup: false,
+  mode: 'basic'
+}
+
 /** 默认应用设置 */
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   editor: DEFAULT_EDITOR_SETTINGS,
   devops: DEFAULT_DEVOPS_SETTINGS,
-  telemetry: DEFAULT_TELEMETRY_SETTINGS
+  telemetry: DEFAULT_TELEMETRY_SETTINGS,
+  lsp: DEFAULT_LSP_SETTINGS
 }
 
 /**

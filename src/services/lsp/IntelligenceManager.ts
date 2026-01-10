@@ -1,23 +1,45 @@
 /**
  * 代码智能管理器
  * 负责管理 Monaco Editor 的代码智能功能
- * 支持双路径: TypeScript/JavaScript 使用 IPC, 其他语言使用 Daemon (Rust 守护进程)
+ *
+ * 支持两种模式:
+ * - Basic Mode: 使用标准 LSP 服务器 (typescript-language-server, pyright 等)
+ * - Smart Mode: 使用自定义 IPC + Rust Daemon 提供高级功能
  */
 
 import * as monaco from 'monaco-editor'
-import { CompletionProvider } from './providers/CompletionProvider.ts'
-import { DefinitionProvider } from './providers/DefinitionProvider.ts'
-import { ReferenceProvider } from './providers/ReferenceProvider.ts'
-import { HoverProvider } from './providers/HoverProvider.ts'
-import { SignatureHelpProvider } from './providers/SignatureHelpProvider.ts'
-import { RenameProvider } from './providers/RenameProvider.ts'
-import { InlayHintsProvider } from './providers/InlayHintsProvider.ts'
-import { DiagnosticsManager } from './DiagnosticsManager.ts'
-import { daemonService } from '@/services/language/DaemonLanguageService.ts'
-import { isDaemonLanguage, isNativeLanguage } from '@/services/language/utils.ts'
-import type { LanguageServerStatus } from '@/types/intelligence.ts'
+import { CompletionProvider } from './providers/CompletionProvider'
+import { DefinitionProvider } from './providers/DefinitionProvider'
+import { ReferenceProvider } from './providers/ReferenceProvider'
+import { HoverProvider } from './providers/HoverProvider'
+import { SignatureHelpProvider } from './providers/SignatureHelpProvider'
+import { RenameProvider } from './providers/RenameProvider'
+import { InlayHintsProvider } from './providers/InlayHintsProvider'
+import { registerLSPProviders } from './providers/LSPProviders'
+import { DiagnosticsManager } from './DiagnosticsManager'
+import { getLSPClientService, destroyLSPClientService } from './LSPClientService'
+import { daemonService } from '@/services/language/DaemonLanguageService'
+import { isDaemonLanguage, isNativeLanguage } from '@/services/language/utils'
+import type { LanguageServerStatus } from '@/types/intelligence'
 
-/** 支持的 Tier 1 语言 (TypeScript Language Service via IPC) */
+/** 智能模式 */
+export type IntelligenceMode = 'basic' | 'smart'
+
+/** 支持的语言 */
+const ALL_LANGUAGES = [
+  'typescript',
+  'javascript',
+  'typescriptreact',
+  'javascriptreact',
+  'python',
+  'go',
+  'rust',
+  'c',
+  'cpp',
+  'java',
+]
+
+/** Tier 1 语言 (TypeScript/JavaScript) - Smart 模式使用 IPC */
 const TIER1_LANGUAGES = [
   'typescript',
   'javascript',
@@ -25,8 +47,8 @@ const TIER1_LANGUAGES = [
   'javascriptreact',
 ]
 
-/** Daemon 支持的语言 (Monaco 语言 ID) */
-const DAEMON_MONACO_LANGUAGES = [
+/** Daemon 语言 - Smart 模式使用 Rust Daemon */
+const DAEMON_LANGUAGES = [
   'python',
   'go',
   'rust',
@@ -45,7 +67,6 @@ const EXT_TO_LANGUAGE: Record<string, string> = {
   '.cjs': 'javascript',
   '.mts': 'typescript',
   '.cts': 'typescript',
-  // Daemon 支持的语言
   '.py': 'python',
   '.pyw': 'python',
   '.go': 'go',
@@ -69,15 +90,107 @@ export class IntelligenceManager {
   private statusListenerCleanup: (() => void) | null = null
   private daemonInitialized = false
 
+  /** 当前模式 */
+  private currentMode: IntelligenceMode = 'basic'
+
+  /** 模式变更回调 */
+  private modeChangeCallbacks: Array<(mode: IntelligenceMode) => void> = []
+
   constructor() {
     this.diagnosticsManager = new DiagnosticsManager()
   }
 
   /**
-   * 初始化代码智能服务
+   * 获取当前模式
+   */
+  getMode(): IntelligenceMode {
+    return this.currentMode
+  }
+
+  /**
+   * 设置模式
+   */
+  async setMode(mode: IntelligenceMode): Promise<void> {
+    if (mode === this.currentMode) return
+
+    console.log(`[IntelligenceManager] Switching mode: ${this.currentMode} -> ${mode}`)
+
+    // 清理当前模式的资源
+    await this.cleanup()
+
+    // 设置新模式
+    this.currentMode = mode
+
+    // 初始化新模式
+    if (mode === 'basic') {
+      await this.initializeBasicMode()
+    } else {
+      await this.initializeSmartMode()
+    }
+
+    // 通知模式变更
+    this.modeChangeCallbacks.forEach(cb => cb(mode))
+  }
+
+  /**
+   * 监听模式变更
+   */
+  onModeChange(callback: (mode: IntelligenceMode) => void): () => void {
+    this.modeChangeCallbacks.push(callback)
+    return () => {
+      const index = this.modeChangeCallbacks.indexOf(callback)
+      if (index >= 0) {
+        this.modeChangeCallbacks.splice(index, 1)
+      }
+    }
+  }
+
+  /**
+   * 初始化代码智能服务 (默认使用 Basic 模式)
    */
   async initialize(): Promise<void> {
-    // 为 Tier 1 语言注册所有 Provider (使用 IPC) - 优先确保基础功能可用
+    if (this.currentMode === 'basic') {
+      await this.initializeBasicMode()
+    } else {
+      await this.initializeSmartMode()
+    }
+  }
+
+  /**
+   * 初始化 Basic 模式 (标准 LSP)
+   */
+  private async initializeBasicMode(): Promise<void> {
+    console.log('[IntelligenceManager] Initializing Basic Mode (Standard LSP)')
+
+    // 为所有语言注册 LSP Provider
+    for (const languageId of ALL_LANGUAGES) {
+      const providers = registerLSPProviders(languageId)
+      this.disposables.push(...providers)
+    }
+
+    // 设置 LSP 诊断监听
+    const lspClient = getLSPClientService()
+    const cleanup = lspClient.onDiagnostics((uri, diagnostics) => {
+      // 查找对应的 model
+      const models = monaco.editor.getModels()
+      const model = models.find(m => m.uri.fsPath === uri.replace('file://', ''))
+      if (model) {
+        const converted = lspClient.convertDiagnostics(diagnostics)
+        monaco.editor.setModelMarkers(model, 'lsp', converted)
+      }
+    })
+    this.disposables.push({ dispose: cleanup })
+
+    console.log('[IntelligenceManager] Basic Mode initialized')
+  }
+
+  /**
+   * 初始化 Smart 模式 (IPC + Daemon)
+   */
+  private async initializeSmartMode(): Promise<void> {
+    console.log('[IntelligenceManager] Initializing Smart Mode (IPC + Daemon)')
+
+    // 为 Tier 1 语言注册 IPC Provider
     for (const languageId of TIER1_LANGUAGES) {
       this.registerProvidersForLanguage(languageId, 'ipc')
     }
@@ -89,8 +202,10 @@ export class IntelligenceManager {
 
     // 初始化 Daemon 服务
     this.initializeDaemon().catch(error => {
-      console.warn('[IntelligenceManager] Daemon 初始化跳过:', error?.message || error)
+      console.warn('[IntelligenceManager] Daemon initialization skipped:', error?.message || error)
     })
+
+    console.log('[IntelligenceManager] Smart Mode initialized')
   }
 
   /**
@@ -100,14 +215,14 @@ export class IntelligenceManager {
     try {
       await daemonService.initialize()
       this.daemonInitialized = true
-      console.log('[IntelligenceManager] Daemon 服务初始化成功')
+      console.log('[IntelligenceManager] Daemon service initialized')
 
       // 为 Daemon 语言注册 Provider
-      for (const languageId of DAEMON_MONACO_LANGUAGES) {
+      for (const languageId of DAEMON_LANGUAGES) {
         this.registerProvidersForLanguage(languageId, 'daemon')
       }
     } catch (error) {
-      console.error('[IntelligenceManager] Daemon 服务初始化失败:', error)
+      console.error('[IntelligenceManager] Daemon service initialization failed:', error)
       this.daemonInitialized = false
     }
   }
@@ -117,7 +232,14 @@ export class IntelligenceManager {
    */
   async openProject(rootPath: string): Promise<void> {
     this.projectRoot = rootPath
-    await window.electronAPI.intelligence.openProject(rootPath)
+
+    if (this.currentMode === 'basic') {
+      // Basic 模式: 设置 LSP 项目根目录
+      await window.electronAPI.lsp.setProjectRoot(rootPath)
+    } else {
+      // Smart 模式: 使用现有的 intelligence IPC
+      await window.electronAPI.intelligence.openProject(rootPath)
+    }
   }
 
   /**
@@ -125,15 +247,15 @@ export class IntelligenceManager {
    */
   async closeProject(): Promise<void> {
     if (this.projectRoot) {
-      await window.electronAPI.intelligence.closeProject(this.projectRoot)
+      if (this.currentMode === 'smart') {
+        await window.electronAPI.intelligence.closeProject(this.projectRoot)
+      }
       this.projectRoot = null
     }
   }
 
   /**
-   * 为指定语言注册所有 Provider
-   * @param languageId Monaco 语言 ID
-   * @param mode 服务模式: 'ipc' 使用 IPC 通信, 'daemon' 使用 Rust 守护进程
+   * 为指定语言注册所有 Provider (Smart 模式)
    */
   private registerProvidersForLanguage(languageId: string, mode: 'ipc' | 'daemon'): void {
     // 补全 Provider
@@ -201,33 +323,46 @@ export class IntelligenceManager {
    * 同步文件内容到语言服务
    */
   syncFile(filePath: string, content: string): void {
-    // 检查是否是支持的语言
     if (!this.isSupported(filePath)) return
 
-    // 判断使用哪种服务
-    if (this.isDaemonLanguage(filePath)) {
-      if (this.daemonInitialized) {
-        daemonService.updateDocument(filePath, content)
+    if (this.currentMode === 'basic') {
+      // Basic 模式: 使用 LSP 客户端
+      const lspClient = getLSPClientService()
+      lspClient.updateDocument(filePath, content)
+    } else {
+      // Smart 模式: 使用原有逻辑
+      if (this.isDaemonLanguage(filePath)) {
+        if (this.daemonInitialized) {
+          daemonService.updateDocument(filePath, content)
+        }
+      } else if (this.isNativeLanguage(filePath)) {
+        const currentVersion = this.fileVersions.get(filePath) || 0
+        const newVersion = currentVersion + 1
+        this.fileVersions.set(filePath, newVersion)
+        window.electronAPI.intelligence.syncFile(filePath, content, newVersion)
       }
-    } else if (this.isNativeLanguage(filePath)) {
-      // 原生语言: 通过 IPC 同步
-      const currentVersion = this.fileVersions.get(filePath) || 0
-      const newVersion = currentVersion + 1
-      this.fileVersions.set(filePath, newVersion)
-      window.electronAPI.intelligence.syncFile(filePath, content, newVersion)
     }
   }
 
   /**
-   * 打开文件 (用于 Daemon 语言)
+   * 打开文件
    */
   openFile(filePath: string, content: string): void {
     if (!this.isSupported(filePath)) return
 
-    if (this.isDaemonLanguage(filePath) && this.daemonInitialized) {
+    if (this.currentMode === 'basic') {
+      // Basic 模式: 使用 LSP 客户端
       const ext = filePath.substring(filePath.lastIndexOf('.'))
       const languageId = EXT_TO_LANGUAGE[ext] || 'plaintext'
-      daemonService.openDocument(filePath, content, languageId)
+      const lspClient = getLSPClientService()
+      lspClient.openDocument(filePath, content, languageId)
+    } else {
+      // Smart 模式: 使用 Daemon
+      if (this.isDaemonLanguage(filePath) && this.daemonInitialized) {
+        const ext = filePath.substring(filePath.lastIndexOf('.'))
+        const languageId = EXT_TO_LANGUAGE[ext] || 'plaintext'
+        daemonService.openDocument(filePath, content, languageId)
+      }
     }
   }
 
@@ -237,12 +372,19 @@ export class IntelligenceManager {
   closeFile(filePath: string): void {
     this.fileVersions.delete(filePath)
 
-    if (this.isDaemonLanguage(filePath)) {
-      if (this.daemonInitialized) {
-        daemonService.closeDocument(filePath)
-      }
+    if (this.currentMode === 'basic') {
+      // Basic 模式: 使用 LSP 客户端
+      const lspClient = getLSPClientService()
+      lspClient.closeDocument(filePath)
     } else {
-      window.electronAPI.intelligence.closeFile(filePath)
+      // Smart 模式
+      if (this.isDaemonLanguage(filePath)) {
+        if (this.daemonInitialized) {
+          daemonService.closeDocument(filePath)
+        }
+      } else {
+        window.electronAPI.intelligence.closeFile(filePath)
+      }
     }
   }
 
@@ -253,12 +395,14 @@ export class IntelligenceManager {
     const filePath = model.uri.fsPath
     if (!this.isSupported(filePath)) return
 
+    // Basic 模式的诊断通过 LSP 事件自动更新
+    if (this.currentMode === 'basic') return
+
+    // Smart 模式
     try {
       if (this.isDaemonLanguage(filePath)) {
         if (this.daemonInitialized) {
-          // 使用 Daemon 获取诊断
           const diagnostics = await daemonService.getDiagnostics(filePath)
-          // 转换为 Monaco 格式
           const converted = diagnostics.map(d => ({
             range: {
               start: { line: d.range.startLine, column: d.range.startColumn },
@@ -270,7 +414,6 @@ export class IntelligenceManager {
           this.diagnosticsManager.setDiagnostics(model, converted)
         }
       } else {
-        // IPC 语言诊断
         const diagnostics = await window.electronAPI.intelligence.getDiagnostics(filePath)
         this.diagnosticsManager.setDiagnostics(model, diagnostics)
       }
@@ -331,15 +474,12 @@ export class IntelligenceManager {
   }
 
   /**
-   * 销毁管理器
+   * 清理资源
    */
-  dispose(): void {
+  private async cleanup(): Promise<void> {
     // 清理所有 Provider
     this.disposables.forEach(d => d.dispose())
     this.disposables = []
-
-    // 清理诊断管理器
-    this.diagnosticsManager.dispose()
 
     // 清理状态监听器
     if (this.statusListenerCleanup) {
@@ -347,14 +487,25 @@ export class IntelligenceManager {
       this.statusListenerCleanup = null
     }
 
-    // 清理 Daemon 服务
-    if (this.daemonInitialized) {
-      daemonService.dispose()
-      this.daemonInitialized = false
+    // 根据模式清理
+    if (this.currentMode === 'basic') {
+      destroyLSPClientService()
+    } else {
+      if (this.daemonInitialized) {
+        daemonService.dispose()
+        this.daemonInitialized = false
+      }
     }
+  }
 
-    // 关闭项目
+  /**
+   * 销毁管理器
+   */
+  dispose(): void {
+    this.cleanup()
+    this.diagnosticsManager.dispose()
     this.closeProject()
+    this.modeChangeCallbacks = []
   }
 }
 
