@@ -6,6 +6,7 @@ import { useGitStore } from '@/stores/git'
 import { useThemeStore } from '@/stores/theme'
 import { useSettingsStore } from '@/stores/settings'
 import { useBottomPanelStore } from '@/stores/bottomPanel'
+import { useIntelligenceStore } from '@/stores/intelligence'
 import { FileExplorer } from '@/components/FileExplorer'
 import { GitPanel } from '@/components/Git'
 import { BottomPanel } from '@/components/BottomPanel'
@@ -15,6 +16,7 @@ import TelemetryConsentDialog from '@/components/TelemetryConsentDialog.vue'
 import LSPSetupDialog from '@/components/LSPSetupDialog.vue'
 import FeedbackReportDialog from '@/components/FeedbackReportDialog.vue'
 import { DebugSidebarPanel } from '@/components/Debug'
+import { IntelligenceModeIndicator } from '@/components/StatusBar'
 import type { IndexingProgress, LanguageServerStatus } from '@/types/intelligence'
 
 // 导入 MDUI 图标
@@ -44,6 +46,7 @@ const gitStore = useGitStore()
 const themeStore = useThemeStore()
 const settingsStore = useSettingsStore()
 const bottomPanelStore = useBottomPanelStore()
+const intelligenceStore = useIntelligenceStore()
 
 // 索引进度状态
 const indexingProgress = ref<IndexingProgress | null>(null)
@@ -64,6 +67,33 @@ const handleFeedbackShortcut = (event: KeyboardEvent) => {
   if (modifierKey && event.shiftKey && event.key.toLowerCase() === 'f') {
     event.preventDefault()
     feedbackDialogRef.value?.open()
+  }
+}
+
+// 处理智能模式切换快捷键
+// Ctrl/Cmd + Shift + I: 切换模式
+// Ctrl/Cmd + Shift + B: 切换到 Basic Mode
+// Ctrl/Cmd + Shift + M: 切换到 Smart Mode (避免与 Ctrl+Shift+S 保存冲突)
+const handleIntelligenceModeShortcut = async (event: KeyboardEvent) => {
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
+  const modifierKey = isMac ? event.metaKey : event.ctrlKey
+
+  if (!modifierKey || !event.shiftKey) return
+
+  const key = event.key.toLowerCase()
+
+  if (key === 'i') {
+    // 切换模式
+    event.preventDefault()
+    await intelligenceStore.toggleMode()
+  } else if (key === 'b') {
+    // 切换到 Basic Mode
+    event.preventDefault()
+    await intelligenceStore.setMode('basic')
+  } else if (key === 'm') {
+    // 切换到 Smart Mode
+    event.preventDefault()
+    await intelligenceStore.setMode('smart')
   }
 }
 
@@ -132,6 +162,11 @@ const switchPanel = (panel: 'explorer' | 'git' | 'search' | 'debug' | 'todos' | 
 onMounted(async () => {
   // 注册反馈快捷键监听器
   window.addEventListener('keydown', handleFeedbackShortcut)
+  // 注册智能模式切换快捷键监听器
+  window.addEventListener('keydown', handleIntelligenceModeShortcut)
+
+  // 从设置初始化智能模式
+  await intelligenceStore.initFromSettings(settingsStore.lspMode)
 
   // 获取平台信息
   if (window.electronAPI) {
@@ -146,6 +181,8 @@ onMounted(async () => {
     // 订阅索引进度
     unsubscribeProgress = window.electronAPI.intelligence.onIndexingProgress((progress) => {
       indexingProgress.value = progress
+      // 同步到 intelligence store
+      intelligenceStore.setIndexingProgress(progress)
     })
 
     // 订阅 LSP 服务器状态
@@ -161,12 +198,16 @@ onMounted(async () => {
       } else {
         lspServers.value.push(status)
       }
+      // 同步到 intelligence store
+      intelligenceStore.updateServerStatus(status)
     })
 
     // 获取初始服务状态
     try {
       const serviceStatus = await window.electronAPI.intelligence.getServiceStatus()
       lspServers.value = serviceStatus.servers
+      // 同步到 intelligence store
+      serviceStatus.servers.forEach(s => intelligenceStore.updateServerStatus(s))
     } catch {
       // 忽略初始化错误
     }
@@ -176,6 +217,8 @@ onMounted(async () => {
 onUnmounted(() => {
   // 移除反馈快捷键监听器
   window.removeEventListener('keydown', handleFeedbackShortcut)
+  // 移除智能模式切换快捷键监听器
+  window.removeEventListener('keydown', handleIntelligenceModeShortcut)
 
   if (unsubscribeProgress) {
     unsubscribeProgress()
@@ -369,6 +412,8 @@ onUnmounted(() => {
         <span class="status-item">
           Ln {{ statusBarInfo.line }}, Col {{ statusBarInfo.column }}
         </span>
+        <!-- 智能模式指示器 -->
+        <IntelligenceModeIndicator />
         <!-- 主题切换开关 -->
         <span class="status-item theme-toggle clickable" @click="themeStore.toggleTheme()" :title="themeStore.isDark ? '切换到浅色模式' : '切换到深色模式'">
           <mdui-icon-dark-mode v-if="themeStore.isDark"></mdui-icon-dark-mode>

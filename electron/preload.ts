@@ -1023,7 +1023,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
         callback(event)
       ipcRenderer.on('lsp:serverStatus', handler)
       return () => ipcRenderer.removeListener('lsp:serverStatus', handler)
-    }
+    },
+
+    // ============ 智能模式切换 ============
+    setMode: (mode: 'basic' | 'smart'): Promise<void> =>
+      ipcRenderer.invoke('intelligence:setMode', mode),
+
+    // ============ 项目分析 ============
+    analyzeProject: (): Promise<{
+      fileCount: number
+      totalSize: number
+      estimatedMemory: number
+      hasComplexDependencies: boolean
+      languages: string[]
+    }> =>
+      ipcRenderer.invoke('intelligence:analyzeProject')
   },
 
   // ============ 调试操作 ============
@@ -1718,6 +1732,18 @@ declare global {
 
         // LSP 服务器状态
         onLSPServerStatus: (callback: (event: { languageId: string; status: string; message?: string }) => void) => () => void
+
+        // 智能模式切换
+        setMode: (mode: 'basic' | 'smart') => Promise<void>
+
+        // 项目分析
+        analyzeProject: () => Promise<{
+          fileCount: number
+          totalSize: number
+          estimatedMemory: number
+          hasComplexDependencies: boolean
+          languages: string[]
+        }>
       }
 
       // 调试

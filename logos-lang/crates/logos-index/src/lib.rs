@@ -1,10 +1,24 @@
 //! Logos Index - Symbol indexing for fast lookup
 
+pub mod adapter;
 pub mod comments;
 pub mod incremental;
+pub mod indexer;
 pub mod inverted;
+pub mod symbol_table;
+pub mod typescript_adapter;
 
+pub use adapter::{
+    AnalysisResult, CallInfo, ExportInfo, ImportInfo, ImportItem, LanguageAdapter,
+    SymbolBuilder, TypeRelation, make_location,
+};
 pub use comments::{CommentScanner, ScannerConfig, TodoIndex, TodoItem, TodoKind};
+pub use indexer::{IndexingStats, ProjectIndexer};
+pub use symbol_table::{
+    Attribute, CallGraph, CallSite, CallType, DependencyGraph, ProjectIndex, SmartSymbol, SymbolId,
+    SymbolLocation, SymbolReference, SymbolTable, TypeHierarchy, TypeInfo, Visibility,
+};
+pub use typescript_adapter::TypeScriptAdapter;
 use logos_core::{Position, Range, Symbol, SymbolKind};
 use std::collections::HashMap;
 

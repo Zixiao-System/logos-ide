@@ -541,20 +541,24 @@ pub struct TreeSitterAdapter {
 
 ## 实现计划
 
-### Phase 2.1: 基础索引
-- [ ] 实现 Symbol Table 结构
-- [ ] TypeScript/JavaScript 语言适配器
-- [ ] 基础符号提取和查找
+### Phase 2.1: 基础索引 ✅
+- [x] 实现 Symbol Table 结构 (`logos-index/src/symbol_table.rs`)
+- [x] TypeScript/JavaScript 语言适配器 (`logos-index/src/typescript_adapter.rs`)
+- [x] 基础符号提取和查找
+- [x] LanguageAdapter trait 定义 (`logos-index/src/adapter.rs`)
+- [x] ProjectIndexer 协调器 (`logos-index/src/indexer.rs`)
 
-### Phase 2.2: 跨文件分析
-- [ ] 实现 Dependency Graph
-- [ ] 导入/导出分析
-- [ ] 增量更新机制
+### Phase 2.2: 跨文件分析 ✅
+- [x] 实现 Dependency Graph
+- [x] 导入/导出分析 (ImportInfo, ExportInfo)
+- [x] 增量更新机制 (reindex_file)
 
-### Phase 2.3: 调用图
-- [ ] 实现 Call Graph
-- [ ] 调用链追踪
-- [ ] 影响分析
+### Phase 2.3: 调用图 ✅
+- [x] 实现 Call Graph
+- [x] 调用站点追踪 (CallSite, CallType)
+- [x] 类型层级关系 (TypeHierarchy: extends/implements)
+- [ ] 调用链追踪 UI
+- [ ] 影响分析 UI
 
 ### Phase 2.4: 高级重构
 - [ ] 安全重命名
@@ -568,3 +572,28 @@ pub struct TreeSitterAdapter {
 - [ ] Rust 适配器
 - [ ] C/C++ 适配器
 - [ ] Java 适配器
+
+## 已实现的核心组件
+
+### Rust 端 (`logos-lang/crates/logos-index/`)
+
+| 文件 | 描述 |
+|------|------|
+| `symbol_table.rs` | SymbolTable, CallGraph, TypeHierarchy, DependencyGraph, ProjectIndex |
+| `adapter.rs` | LanguageAdapter trait, AnalysisResult, ImportInfo, ExportInfo, CallInfo |
+| `typescript_adapter.rs` | TypeScript/JavaScript 解析器，使用 tree-sitter |
+| `indexer.rs` | ProjectIndexer 协调器，文件/目录索引 |
+
+### 前端 (`src/`)
+
+| 文件 | 描述 |
+|------|------|
+| `stores/intelligence.ts` | Pinia store 管理智能模式状态 |
+| `components/StatusBar/IntelligenceModeIndicator.vue` | 状态栏模式指示器 |
+
+### 后端 (`electron/`)
+
+| 文件 | 描述 |
+|------|------|
+| `services/intelligenceService.ts` | IPC 处理器，模式切换 |
+| `preload.ts` | setMode, analyzeProject API |

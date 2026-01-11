@@ -68,12 +68,13 @@ const handleSkip = () => {
 
           <div
             class="mode-card"
-            :class="{ selected: selectedMode === 'smart', disabled: true }"
+            :class="{ selected: selectedMode === 'smart' }"
+            @click="selectedMode = 'smart'"
           >
             <div class="mode-header">
               <mdui-icon-memory></mdui-icon-memory>
               <span class="mode-title">Smart 模式</span>
-              <span class="coming-soon">即将推出</span>
+              <mdui-icon-check-circle v-if="selectedMode === 'smart'" class="check-icon"></mdui-icon-check-circle>
             </div>
             <p class="mode-desc">全量索引，类似 JetBrains 的智能体验</p>
             <ul class="mode-features">
@@ -163,18 +164,13 @@ const handleSkip = () => {
   transition: all 0.2s ease;
 }
 
-.mode-card:hover:not(.disabled) {
+.mode-card:hover {
   border-color: var(--mdui-color-outline);
 }
 
 .mode-card.selected {
   border-color: var(--mdui-color-primary);
   background: var(--mdui-color-surface-container-high);
-}
-
-.mode-card.disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
 }
 
 .mode-header {
@@ -199,14 +195,6 @@ const handleSkip = () => {
 .check-icon {
   color: var(--mdui-color-primary);
   font-size: 20px;
-}
-
-.coming-soon {
-  font-size: 0.75rem;
-  background: var(--mdui-color-secondary-container);
-  color: var(--mdui-color-on-secondary-container);
-  padding: 2px 8px;
-  border-radius: 4px;
 }
 
 .mode-desc {

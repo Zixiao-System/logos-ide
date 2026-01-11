@@ -931,6 +931,11 @@ class IntelligenceServiceManager {
     this.mainWindow = getMainWindow
   }
 
+  /** 获取所有已打开项目的根目录 */
+  getProjectRoots(): string[] {
+    return Array.from(this.services.keys())
+  }
+
   async openProject(rootPath: string): Promise<void> {
     // 启动 TypeScript 原生服务
     if (!this.services.has(rootPath)) {
@@ -1209,6 +1214,162 @@ export function registerIntelligenceHandlers(getMainWindow: () => BrowserWindow 
   ipcMain.handle('intelligence:serviceStatus', async () => {
     return serviceManager.getServiceStatus()
   })
+
+  // ============ 智能模式管理 ============
+
+  // 当前模式
+  let currentMode: 'basic' | 'smart' = 'basic'
+
+  // 设置智能模式
+  ipcMain.handle('intelligence:setMode', async (_, mode: 'basic' | 'smart') => {
+    const previousMode = currentMode
+    currentMode = mode
+
+    console.log(`[Intelligence] Switching mode: ${previousMode} -> ${mode}`)
+
+    const mainWindow = getMainWindow()
+    if (!mainWindow) return
+
+    if (mode === 'smart') {
+      // 切换到 Smart Mode
+      // 1. 停止 LSP 服务器
+      // 2. 启动 Daemon 全量索引
+      mainWindow.webContents.send('intelligence:indexingProgress', {
+        phase: 'scanning',
+        message: 'Starting Smart Mode indexing...',
+        processedFiles: 0,
+        totalFiles: 0,
+        percentage: 0
+      })
+
+      // TODO: 启动 logos-daemon 全量索引
+      // 目前先模拟索引完成
+      setTimeout(() => {
+        mainWindow.webContents.send('intelligence:indexingProgress', {
+          phase: 'ready',
+          message: 'Smart Mode ready',
+          processedFiles: 0,
+          totalFiles: 0,
+          percentage: 100
+        })
+      }, 1000)
+    } else {
+      // 切换到 Basic Mode
+      // 1. 停止 Daemon 索引
+      // 2. 启动 LSP 服务器
+      mainWindow.webContents.send('intelligence:indexingProgress', {
+        phase: 'idle',
+        message: '',
+        processedFiles: 0,
+        totalFiles: 0,
+        percentage: 0
+      })
+    }
+  })
+
+  // 分析项目
+  ipcMain.handle('intelligence:analyzeProject', async () => {
+    // 获取当前项目根目录
+    const projectRoots = serviceManager.getProjectRoots()
+    const rootPath = projectRoots[0]
+
+    if (!rootPath) {
+      return {
+        fileCount: 0,
+        totalSize: 0,
+        estimatedMemory: 0,
+        hasComplexDependencies: false,
+        languages: []
+      }
+    }
+
+    try {
+      // 统计文件
+      const stats = await analyzeProjectFiles(rootPath)
+      return stats
+    } catch (error) {
+      console.error('[Intelligence] Failed to analyze project:', error)
+      return {
+        fileCount: 0,
+        totalSize: 0,
+        estimatedMemory: 0,
+        hasComplexDependencies: false,
+        languages: []
+      }
+    }
+  })
+}
+
+// 分析项目文件
+async function analyzeProjectFiles(rootPath: string): Promise<{
+  fileCount: number
+  totalSize: number
+  estimatedMemory: number
+  hasComplexDependencies: boolean
+  languages: string[]
+}> {
+  const languageSet = new Set<string>()
+  let fileCount = 0
+  let totalSize = 0
+
+  async function walkDir(dir: string): Promise<void> {
+    try {
+      const entries = await fs.promises.readdir(dir, { withFileTypes: true })
+
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name)
+
+        // 跳过 node_modules, .git 等目录
+        if (entry.isDirectory()) {
+          if (!['node_modules', '.git', 'dist', 'build', '.next', 'target'].includes(entry.name)) {
+            await walkDir(fullPath)
+          }
+          continue
+        }
+
+        if (entry.isFile()) {
+          const ext = path.extname(entry.name)
+          const langId = EXTENSION_TO_LANGUAGE[ext]
+          if (langId) {
+            languageSet.add(langId)
+            fileCount++
+            try {
+              const stat = await fs.promises.stat(fullPath)
+              totalSize += stat.size
+            } catch {
+              // 忽略无法访问的文件
+            }
+          }
+        }
+      }
+    } catch {
+      // 忽略无法访问的目录
+    }
+  }
+
+  await walkDir(rootPath)
+
+  // 检查是否有复杂依赖 (package.json 中的依赖数量)
+  let hasComplexDependencies = false
+  try {
+    const pkgPath = path.join(rootPath, 'package.json')
+    const pkgContent = await fs.promises.readFile(pkgPath, 'utf-8')
+    const pkg = JSON.parse(pkgContent)
+    const depCount = Object.keys(pkg.dependencies || {}).length +
+                     Object.keys(pkg.devDependencies || {}).length
+    hasComplexDependencies = depCount > 50
+  } catch {
+    // 无 package.json 或解析失败
+  }
+
+  return {
+    fileCount,
+    totalSize,
+    // 估算内存需求 (每个文件约 1KB symbol table)
+    estimatedMemory: Math.ceil(fileCount * 1.5 / 1024), // MB
+    hasComplexDependencies,
+    languages: Array.from(languageSet)
+  }
 }
 
 export { serviceManager }

@@ -440,28 +440,66 @@ registerCommand('intelligence.toggleMode', async () => {
 
 | 快捷键 | 操作 |
 |--------|------|
-| `Ctrl+Shift+I` | 切换智能模式 |
-| `Ctrl+Shift+B` | 切换到 Basic Mode |
-| `Ctrl+Shift+S` | 切换到 Smart Mode |
+| `Ctrl/Cmd+Shift+I` | 切换智能模式 |
+| `Ctrl/Cmd+Shift+B` | 切换到 Basic Mode |
+| `Ctrl/Cmd+Shift+M` | 切换到 Smart Mode |
 
 ## 实现计划
 
-### Phase 1: 基础切换 (已完成)
+### Phase 1: 基础切换 ✅
 - [x] IntelligenceManager 模式切换逻辑
 - [x] Basic Mode LSP 集成
-- [x] 模式状态管理
+- [x] 模式状态管理 (`src/stores/intelligence.ts`)
 
-### Phase 2: UI 组件
-- [ ] 状态栏模式指示器
-- [ ] 模式切换菜单
-- [ ] 索引进度显示
+### Phase 2: UI 组件 ✅
+- [x] 状态栏模式指示器 (`src/components/StatusBar/IntelligenceModeIndicator.vue`)
+- [x] 模式切换菜单 (下拉菜单)
+- [x] 索引进度显示 (进度条)
+- [x] 快捷键支持 (Ctrl/Cmd+Shift+I/B/M)
 
 ### Phase 3: 自动策略
-- [ ] 项目规模分析
+- [x] 项目规模分析 (analyzeProject API)
 - [ ] 内存压力监控
 - [ ] 自动模式选择
 
 ### Phase 4: 设置与持久化
-- [ ] 用户偏好设置
+- [x] 用户偏好设置 (通过 settingsStore.lspMode)
 - [ ] 项目级别设置
-- [ ] 设置 UI
+- [x] LSP 设置对话框 (`src/components/LSPSetupDialog.vue`)
+
+## 已实现的组件
+
+### 前端组件
+
+**`src/stores/intelligence.ts`**
+- `IntelligenceMode`: 'basic' | 'smart'
+- `IndexingProgress`: 索引进度状态
+- `setMode()`: 切换模式
+- `toggleMode()`: 切换模式
+- `initFromSettings()`: 从设置初始化
+
+**`src/components/StatusBar/IntelligenceModeIndicator.vue`**
+- 显示当前模式 (Basic/Smart)
+- 索引进度条
+- 下拉菜单切换模式
+- 自动选择开关
+
+**`src/App.vue`**
+- 快捷键处理 (Ctrl/Cmd+Shift+I/B/M)
+- 索引进度订阅
+- LSP 服务器状态显示
+
+### 后端 API
+
+**`electron/preload.ts`**
+```typescript
+intelligence: {
+  setMode(mode: 'basic' | 'smart'): Promise<void>
+  analyzeProject(): Promise<ProjectAnalysis>
+  // ... 其他 API
+}
+```
+
+**`electron/services/intelligenceService.ts`**
+- `intelligence:setMode` IPC 处理器
+- `intelligence:analyzeProject` IPC 处理器
