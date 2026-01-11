@@ -4,7 +4,7 @@
  * 管理应用程序的各项设置
  */
 
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useThemeStore } from '@/stores/theme'
 import type { CICDProvider } from '@/types/settings'
@@ -14,9 +14,31 @@ import '@mdui/icons/dark-mode.js'
 import '@mdui/icons/light-mode.js'
 import '@mdui/icons/visibility.js'
 import '@mdui/icons/visibility-off.js'
+import '@mdui/icons/palette.js'
+import '@mdui/icons/refresh.js'
+import '@mdui/icons/check.js'
 
 const settingsStore = useSettingsStore()
 const themeStore = useThemeStore()
+
+// 壁纸图片列表（从 GitHub 获取）
+const wallpaperImages = [
+  { id: 1, url: 'https://raw.githubusercontent.com/Zixiao-System/color-ref-imgs/main/ref_img1.png' },
+  { id: 2, url: 'https://raw.githubusercontent.com/Zixiao-System/color-ref-imgs/main/ref_img2.png' },
+  { id: 3, url: 'https://raw.githubusercontent.com/Zixiao-System/color-ref-imgs/main/ref_img3.png' },
+  { id: 4, url: 'https://raw.githubusercontent.com/Zixiao-System/color-ref-imgs/main/ref_img4.png' },
+  { id: 5, url: 'https://raw.githubusercontent.com/Zixiao-System/color-ref-imgs/main/ref_img5.png' },
+  { id: 6, url: 'https://raw.githubusercontent.com/Zixiao-System/color-ref-imgs/main/ref_img6.png' },
+  { id: 7, url: 'https://raw.githubusercontent.com/Zixiao-System/color-ref-imgs/main/ref_img7.png' },
+  { id: 8, url: 'https://raw.githubusercontent.com/Zixiao-System/color-ref-imgs/main/ref_img8.png' },
+  { id: 9, url: 'https://raw.githubusercontent.com/Zixiao-System/color-ref-imgs/main/ref_img9.png' }
+]
+
+// 选中的壁纸 ID
+const selectedWallpaper = ref<number | null>(null)
+
+// 自定义颜色输入
+const customColorInput = ref(themeStore.customColor || '#6750a4')
 
 // 主题选项
 const themeOptions = [
@@ -117,6 +139,33 @@ const telemetryEnabled = computed({
 // 从 package.json 动态读取版本号
 import pkg from '../../package.json'
 const appVersion = pkg.version
+
+// 从壁纸提取颜色
+async function extractColorFromWallpaper(wallpaper: { id: number; url: string }) {
+  selectedWallpaper.value = wallpaper.id
+  try {
+    const color = await themeStore.extractColorFromWallpaper(wallpaper.url)
+    customColorInput.value = color
+  } catch (err) {
+    console.error('Failed to extract color from wallpaper:', err)
+    selectedWallpaper.value = null
+  }
+}
+
+// 应用自定义颜色
+function applyCustomColor() {
+  if (customColorInput.value && /^#[0-9A-Fa-f]{6}$/.test(customColorInput.value)) {
+    themeStore.setCustomColor(customColorInput.value)
+    selectedWallpaper.value = null
+  }
+}
+
+// 重置配色方案
+function resetColorScheme() {
+  themeStore.resetColorScheme()
+  customColorInput.value = '#6750a4'
+  selectedWallpaper.value = null
+}
 </script>
 
 <template>
@@ -151,6 +200,80 @@ const appVersion = pkg.version
             {{ theme.label }}
           </mdui-menu-item>
         </mdui-select>
+      </div>
+    </mdui-card>
+
+    <!-- 个性化设置 -->
+    <mdui-card variant="outlined" class="settings-section">
+      <h2>
+        <mdui-icon-palette style="vertical-align: middle; margin-right: 8px;"></mdui-icon-palette>
+        个性化
+      </h2>
+
+      <div class="setting-item">
+        <div class="setting-info">
+          <span class="setting-label">主题色</span>
+          <span class="setting-description">自定义应用的主题颜色</span>
+        </div>
+        <div class="color-picker-row">
+          <input
+            type="color"
+            v-model="customColorInput"
+            class="color-input"
+          />
+          <mdui-text-field
+            :value="customColorInput"
+            variant="outlined"
+            class="color-text-input"
+            @input="(e: any) => customColorInput = e.target.value"
+          ></mdui-text-field>
+          <mdui-button-icon @click="applyCustomColor">
+            <mdui-icon-check></mdui-icon-check>
+          </mdui-button-icon>
+        </div>
+      </div>
+
+      <mdui-divider></mdui-divider>
+
+      <div class="setting-item-vertical">
+        <div class="setting-info">
+          <span class="setting-label">从壁纸中提取颜色</span>
+          <span class="setting-description">选择一张壁纸，自动提取主色调作为主题色</span>
+        </div>
+        <div class="wallpaper-grid">
+          <div
+            v-for="wallpaper in wallpaperImages"
+            :key="wallpaper.id"
+            class="wallpaper-item"
+            :class="{ selected: selectedWallpaper === wallpaper.id }"
+            @click="extractColorFromWallpaper(wallpaper)"
+          >
+            <img :src="wallpaper.url" :alt="`壁纸 ${wallpaper.id}`" loading="lazy" />
+            <div v-if="selectedWallpaper === wallpaper.id && themeStore.extractingColor" class="loading-overlay">
+              <mdui-circular-progress></mdui-circular-progress>
+            </div>
+            <div v-else-if="selectedWallpaper === wallpaper.id" class="selected-overlay">
+              <mdui-icon-check></mdui-icon-check>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <mdui-divider></mdui-divider>
+
+      <div class="setting-item">
+        <div class="setting-info">
+          <span class="setting-label">重置配色</span>
+          <span class="setting-description">恢复到默认配色方案</span>
+        </div>
+        <mdui-button variant="outlined" @click="resetColorScheme">
+          <mdui-icon-refresh slot="icon"></mdui-icon-refresh>
+          恢复默认
+        </mdui-button>
+      </div>
+
+      <div v-if="themeStore.customColor" class="current-color-info">
+        <p>当前主题色：<span class="color-preview" :style="{ backgroundColor: themeStore.customColor }"></span> {{ themeStore.customColor }}</p>
       </div>
     </mdui-card>
 
@@ -450,5 +573,117 @@ mdui-select {
   font-size: 0.875rem;
   color: var(--mdui-color-on-surface-variant);
   line-height: 1.5;
+}
+
+/* 个性化设置样式 */
+.setting-item-vertical {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 0;
+}
+
+.color-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.color-input {
+  width: 48px;
+  height: 48px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  padding: 0;
+  background: transparent;
+}
+
+.color-input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.color-input::-webkit-color-swatch {
+  border: 2px solid var(--mdui-color-outline);
+  border-radius: 8px;
+}
+
+.color-text-input {
+  width: 120px;
+}
+
+.wallpaper-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.wallpaper-item {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.wallpaper-item:hover {
+  border-color: var(--mdui-color-primary);
+  transform: scale(1.02);
+}
+
+.wallpaper-item.selected {
+  border-color: var(--mdui-color-primary);
+  box-shadow: 0 0 0 2px rgba(var(--mdui-color-primary-rgb), 0.3);
+}
+
+.wallpaper-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.loading-overlay,
+.selected-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.selected-overlay mdui-icon-check {
+  color: white;
+  font-size: 32px;
+}
+
+.current-color-info {
+  background: var(--mdui-color-surface-container);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-top: 12px;
+}
+
+.current-color-info p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--mdui-color-on-surface-variant);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.color-preview {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1px solid var(--mdui-color-outline);
 }
 </style>

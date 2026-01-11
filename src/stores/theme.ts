@@ -1,27 +1,38 @@
 /**
  * 主题状态管理
  * 负责深色/浅色模式的切换和持久化
+ * 支持动态配色功能
  */
 
 import { defineStore } from 'pinia'
+import { setColorScheme } from 'mdui/functions/setColorScheme.js'
+import { removeColorScheme } from 'mdui/functions/removeColorScheme.js'
+import { getColorFromImage } from 'mdui/functions/getColorFromImage.js'
 
 // 主题类型定义
 type ThemeMode = 'light' | 'dark' | 'auto'
 
 // localStorage 键名
 const THEME_STORAGE_KEY = 'lsp-ide-theme'
+const COLOR_SCHEME_STORAGE_KEY = 'lsp-ide-color-scheme'
 
 interface ThemeState {
   /** 当前主题设置 */
   mode: ThemeMode
   /** 系统偏好 (用于 auto 模式计算) */
   systemPrefersDark: boolean
+  /** 自定义配色 (十六进制颜色值) */
+  customColor: string | null
+  /** 是否正在从壁纸提取颜色 */
+  extractingColor: boolean
 }
 
 export const useThemeStore = defineStore('theme', {
   state: (): ThemeState => ({
     mode: 'dark',
-    systemPrefersDark: false
+    systemPrefersDark: false,
+    customColor: null,
+    extractingColor: false
   }),
 
   getters: {
@@ -71,6 +82,13 @@ export const useThemeStore = defineStore('theme', {
         this.mode = savedTheme
       }
 
+      // 从 localStorage 恢复自定义配色
+      const savedColor = localStorage.getItem(COLOR_SCHEME_STORAGE_KEY)
+      if (savedColor) {
+        this.customColor = savedColor
+        setColorScheme(savedColor)
+      }
+
       // 应用主题
       this.applyTheme()
     },
@@ -112,6 +130,59 @@ export const useThemeStore = defineStore('theme', {
       } else {
         html.classList.add(`mdui-theme-${this.mode}`)
       }
+    },
+
+    /**
+     * 设置自定义配色方案
+     * @param color 十六进制颜色值
+     */
+    setCustomColor(color: string) {
+      this.customColor = color
+      localStorage.setItem(COLOR_SCHEME_STORAGE_KEY, color)
+      setColorScheme(color)
+    },
+
+    /**
+     * 从壁纸图片提取颜色并设置配色方案
+     * @param imageUrl 图片 URL
+     */
+    async extractColorFromWallpaper(imageUrl: string): Promise<string> {
+      this.extractingColor = true
+      try {
+        const image = new Image()
+        image.crossOrigin = 'anonymous'
+
+        return new Promise((resolve, reject) => {
+          image.onload = async () => {
+            try {
+              const color = await getColorFromImage(image)
+              this.setCustomColor(color)
+              this.extractingColor = false
+              resolve(color)
+            } catch (err) {
+              this.extractingColor = false
+              reject(err)
+            }
+          }
+          image.onerror = () => {
+            this.extractingColor = false
+            reject(new Error('Failed to load image'))
+          }
+          image.src = imageUrl
+        })
+      } catch (err) {
+        this.extractingColor = false
+        throw err
+      }
+    },
+
+    /**
+     * 重置配色方案到默认
+     */
+    resetColorScheme() {
+      this.customColor = null
+      localStorage.removeItem(COLOR_SCHEME_STORAGE_KEY)
+      removeColorScheme()
     }
   }
 })
