@@ -1,4 +1,6 @@
 name: Check & Build
+permissions:
+  contents: read
 
 on:
   push:
