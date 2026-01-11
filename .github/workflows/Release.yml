@@ -377,6 +377,7 @@ jobs:
     needs: [build, publish-release, homebrew, aur, update-docs]
     if: always()
     runs-on: ubuntu-latest
+    permissions: {}
     steps:
       - name: Check job results
         run: |
