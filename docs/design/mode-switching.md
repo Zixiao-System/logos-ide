@@ -503,3 +503,21 @@ intelligence: {
 **`electron/services/intelligenceService.ts`**
 - `intelligence:setMode` IPC 处理器
 - `intelligence:analyzeProject` IPC 处理器
+
+### Rust Daemon API
+
+**`logos-daemon/src/state.rs`**
+- `IntelligenceMode` 枚举 (Basic/Smart)
+- `enable_smart_mode()` 启用 Smart 模式并开始索引
+- `enable_basic_mode()` 切换回 Basic 模式
+- `get_indexer()` 获取 ProjectIndexer
+
+**`logos-daemon/src/handlers/mode.rs`**
+- `logos/setMode` - 切换模式
+- `logos/getMode` - 获取当前模式
+- `logos/getIndexStats` - 获取索引统计
+
+**`logos-daemon/src/handlers/call_hierarchy.rs`**
+- `textDocument/prepareCallHierarchy` - 准备调用层级
+- `callHierarchy/incomingCalls` - 获取调用者
+- `callHierarchy/outgoingCalls` - 获取被调用者

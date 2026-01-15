@@ -557,6 +557,7 @@ pub struct TreeSitterAdapter {
 - [x] 实现 Call Graph
 - [x] 调用站点追踪 (CallSite, CallType)
 - [x] 类型层级关系 (TypeHierarchy: extends/implements)
+- [x] Call Hierarchy API (`logos-daemon/src/handlers/call_hierarchy.rs`)
 - [ ] 调用链追踪 UI
 - [ ] 影响分析 UI
 
@@ -567,7 +568,7 @@ pub struct TreeSitterAdapter {
 - [ ] 内联
 
 ### Phase 2.5: 更多语言
-- [ ] Python 适配器
+- [x] Python 适配器 (`logos-index/src/python_adapter.rs`)
 - [ ] Go 适配器
 - [ ] Rust 适配器
 - [ ] C/C++ 适配器
@@ -582,7 +583,16 @@ pub struct TreeSitterAdapter {
 | `symbol_table.rs` | SymbolTable, CallGraph, TypeHierarchy, DependencyGraph, ProjectIndex |
 | `adapter.rs` | LanguageAdapter trait, AnalysisResult, ImportInfo, ExportInfo, CallInfo |
 | `typescript_adapter.rs` | TypeScript/JavaScript 解析器，使用 tree-sitter |
+| `python_adapter.rs` | Python 解析器，使用 tree-sitter |
 | `indexer.rs` | ProjectIndexer 协调器，文件/目录索引 |
+
+### Rust 端 (`logos-lang/crates/logos-daemon/`)
+
+| 文件 | 描述 |
+|------|------|
+| `state.rs` | IntelligenceMode, ProjectIndexer 集成 |
+| `handlers/call_hierarchy.rs` | prepareCallHierarchy, incomingCalls, outgoingCalls |
+| `handlers/mode.rs` | setMode, getMode, getIndexStats |
 
 ### 前端 (`src/`)
 
