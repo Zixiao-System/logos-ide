@@ -311,11 +311,12 @@ describe('Git Store', () => {
 
   describe('防抖刷新', () => {
     it('应该使用防抖刷新', async () => {
+      vi.useFakeTimers()
+      
       const gitStore = useGitStore()
       const repoPath = '/test/repo'
 
       gitStore.isRepo = true
-      gitStore.initDebouncedRefresh()
 
       mockElectronAPI.git.status.mockResolvedValue({
         branch: 'main',
@@ -331,11 +332,13 @@ describe('Git Store', () => {
       gitStore.refresh(repoPath)
       gitStore.refresh(repoPath)
 
-      // 等待防抖时间
-      await new Promise(resolve => setTimeout(resolve, 600))
+      // 快进防抖时间
+      await vi.runAllTimersAsync()
 
       // 应该只调用一次（防抖后）
       expect(mockElectronAPI.git.status).toHaveBeenCalledTimes(1)
+      
+      vi.useRealTimers()
     })
   })
 
