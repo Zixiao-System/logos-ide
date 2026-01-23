@@ -8,7 +8,7 @@
   },
   "license": "MIT",
   "main": "dist-electron/main.js",
-  "scripts": { 
+  "scripts": {
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build && electron-builder",
     "build:daemon": "cd logos-lang && cargo build --release --package logos-daemon",
