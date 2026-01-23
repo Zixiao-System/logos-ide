@@ -5,6 +5,9 @@
 
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useGitStore } from '@/stores/git'
+import { useAgentsStore } from '@/stores/agents'
+import { useSettingsStore } from '@/stores/settings'
+import { useNotificationStore } from '@/stores/notification'
 import { useFileExplorerStore } from '@/stores/fileExplorer'
 import { useEditorStore } from '@/stores/editor'
 import { useDiffStore } from '@/stores/diff'
@@ -23,8 +26,13 @@ import '@mdui/icons/upload.js'
 import '@mdui/icons/check-circle.js'
 import '@mdui/icons/error.js'
 import '@mdui/icons/keyboard-arrow-down.js'
+import '@mdui/icons/auto-awesome.js'
+import '@mdui/icons/call-merge.js'
 
 const gitStore = useGitStore()
+const agentsStore = useAgentsStore()
+const settingsStore = useSettingsStore()
+const notificationStore = useNotificationStore()
 const fileExplorerStore = useFileExplorerStore()
 const editorStore = useEditorStore()
 const diffStore = useDiffStore()
@@ -203,6 +211,54 @@ const handleUpdateMessage = (message: string) => {
   gitStore.setCommitMessage(message)
 }
 
+const handleGenerateCommitMessage = async () => {
+  if (!repoPath()) return
+  try {
+    const message = await agentsStore.generateCommitMessage(repoPath())
+    if (message) {
+      gitStore.setCommitMessage(message)
+      notificationStore.success('已生成提交信息')
+    } else {
+      notificationStore.warning('未检测到暂存变更')
+    }
+  } catch (error) {
+    notificationStore.error((error as Error).message)
+  }
+}
+
+const handleCreatePR = async () => {
+  if (!repoPath()) return
+  if (!settingsStore.devops.githubAppId || !settingsStore.devops.githubAppPrivateKeyPath) {
+    notificationStore.error('请先配置 GitHub App ID 和私钥路径')
+    return
+  }
+
+  try {
+    const pr = await agentsStore.generatePullRequest(repoPath())
+    if (!pr) {
+      notificationStore.warning('没有可用的变更用于生成 PR')
+      return
+    }
+
+    const base = await window.electronAPI.git.defaultBranch(repoPath())
+    const head = await window.electronAPI.git.currentBranch(repoPath())
+
+    const result = await window.electronAPI.githubApp.createPR({
+      repoPath: repoPath(),
+      title: pr.title,
+      body: pr.body,
+      head,
+      base,
+      appId: settingsStore.devops.githubAppId,
+      privateKeyPath: settingsStore.devops.githubAppPrivateKeyPath
+    })
+
+    notificationStore.success(`PR 已创建: #${result.number}`)
+  } catch (error) {
+    notificationStore.error((error as Error).message)
+  }
+}
+
 // 监听冲突检测事件
 onMounted(() => {
   window.addEventListener('git:conflict-detected', handleConflictDetected)
@@ -259,6 +315,12 @@ onUnmounted(() => {
         <mdui-button-icon @click="handleRefresh" title="刷新" :disabled="gitStore.loading">
           <mdui-icon-refresh></mdui-icon-refresh>
         </mdui-button-icon>
+        <mdui-button-icon @click="handleGenerateCommitMessage" title="AI 生成提交信息">
+          <mdui-icon-auto-awesome></mdui-icon-auto-awesome>
+        </mdui-button-icon>
+        <mdui-button-icon @click="handleCreatePR" title="一键创建 PR">
+          <mdui-icon-call-merge></mdui-icon-call-merge>
+        </mdui-button-icon>
       </div>
     </div>
 
@@ -312,6 +374,7 @@ onUnmounted(() => {
         @update:message="handleUpdateMessage"
         @commit="handleCommit"
         @stage-all="handleStageAllFromCommitBox"
+        @generate="handleGenerateCommitMessage"
       />
 
       <!-- 变更列表 -->

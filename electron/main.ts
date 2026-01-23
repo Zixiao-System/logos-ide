@@ -13,6 +13,8 @@ import { registerUpdateHandlers } from './services/updateService'
 import { registerLanguageDaemonHandlers, cleanupLanguageDaemon } from './services/languageDaemonHandlers'
 import { registerLSPHandlers, getLSPServerManager } from './services/lspServerManager'
 import { registerMemoryMonitorHandlers } from './services/memoryMonitorService'
+import { registerAIHandlers } from './services/aiService'
+import { registerGitHubAppHandlers } from './services/githubAppService'
 
 // 环境变量
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
@@ -76,7 +78,8 @@ function createWindow() {
       preload: join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: false
+      sandbox: false,
+      webviewTag: true
     },
     show: false,
     backgroundColor: '#1e1e1e'
@@ -160,8 +163,14 @@ function registerAllHandlers() {
   // ============ GitHub Actions ============
   registerGitHubHandlers()
 
+  // ============ GitHub App ============
+  registerGitHubAppHandlers()
+
   // ============ GitLab CI ============
   registerGitLabHandlers()
+
+  // ============ AI / Agents ============
+  registerAIHandlers()
 
   // ============ 代码智能 ============
   registerIntelligenceHandlers(getMainWindow)

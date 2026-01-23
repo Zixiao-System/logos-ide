@@ -271,6 +271,32 @@ export function registerGitHandlers(): void {
     return parseBranches(output, currentBranch)
   })
 
+  // 获取当前分支
+  ipcMain.handle('git:currentBranch', async (_, repoPath: string): Promise<string> => {
+    return (await execGit(repoPath, 'branch --show-current')).trim()
+  })
+
+  // 获取默认分支 (origin/HEAD)
+  ipcMain.handle('git:defaultBranch', async (_, repoPath: string): Promise<string> => {
+    try {
+      const output = await execGit(repoPath, 'symbolic-ref refs/remotes/origin/HEAD')
+      const match = output.trim().match(/refs\/remotes\/origin\/(.+)$/)
+      if (match) return match[1]
+    } catch {
+      // ignore
+    }
+
+    try {
+      const output = await execGit(repoPath, 'remote show origin')
+      const match = output.match(/HEAD branch:\s+(.+)/)
+      if (match) return match[1].trim()
+    } catch {
+      // ignore
+    }
+
+    return 'main'
+  })
+
   // 切换分支
   ipcMain.handle('git:checkout', async (_, repoPath: string, branchName: string) => {
     await execGit(repoPath, `checkout "${branchName}"`)
@@ -295,6 +321,16 @@ export function registerGitHandlers(): void {
   ipcMain.handle('git:diff', async (_, repoPath: string, filePath: string, staged: boolean): Promise<string> => {
     const stagedFlag = staged ? '--staged' : ''
     return await execGit(repoPath, `diff ${stagedFlag} "${filePath}"`)
+  })
+
+  // 获取暂存区差异 (全量)
+  ipcMain.handle('git:diffStaged', async (_, repoPath: string): Promise<string> => {
+    return await execGit(repoPath, 'diff --staged')
+  })
+
+  // 获取分支差异
+  ipcMain.handle('git:diffRange', async (_, repoPath: string, base: string, head: string): Promise<string> => {
+    return await execGit(repoPath, `diff "${base}"..."${head}"`)
   })
 
   // 获取文件内容 (某个提交版本)

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useEditorStore } from '@/stores/editor'
 import { useGitStore } from '@/stores/git'
@@ -9,6 +9,7 @@ import { useBottomPanelStore } from '@/stores/bottomPanel'
 import { useIntelligenceStore } from '@/stores/intelligence'
 import { FileExplorer } from '@/components/FileExplorer'
 import { GitPanel } from '@/components/Git'
+import { AgentsPanel } from '@/components/Agents'
 import { BottomPanel } from '@/components/BottomPanel'
 import TodoPanel from '@/components/Analysis/TodoPanel.vue'
 import CommitAnalysisPanel from '@/components/Analysis/CommitAnalysisPanel.vue'
@@ -41,6 +42,7 @@ import '@mdui/icons/checklist.js'
 import '@mdui/icons/analytics.js'
 import '@mdui/icons/bug-report.js'
 import '@mdui/icons/history.js'
+import '@mdui/icons/auto-awesome.js'
 
 
 const router = useRouter()
@@ -102,9 +104,16 @@ const handleIntelligenceModeShortcut = async (event: KeyboardEvent) => {
 }
 
 // UI 状态
+const DEFAULT_SIDEBAR_WIDTH = 260
+const MIN_SIDEBAR_WIDTH = 180
+const MAX_SIDEBAR_WIDTH = 420
+
 const sidebarOpen = ref(true)
-const sidebarWidth = ref(260)
-const activeSidebarPanel = ref<'explorer' | 'git' | 'search' | 'debug' | 'todos' | 'commitAnalysis' | 'fileHistory'>('explorer')
+const sidebarWidth = ref(settingsStore.ui.sidebarWidth)
+const isResizing = ref(false)
+const resizeStartX = ref(0)
+const resizeStartWidth = ref(0)
+const activeSidebarPanel = ref<'explorer' | 'git' | 'agents' | 'search' | 'debug' | 'todos' | 'commitAnalysis' | 'fileHistory'>('explorer')
 
 // 导航项 (移除终端，改为底部面板)
 const navItems = [
@@ -126,6 +135,7 @@ const toggleTerminalPanel = () => {
 const panelItems = [
   { id: 'explorer' as const, icon: 'folder', label: '资源管理器' },
   { id: 'git' as const, icon: 'source', label: '源代码管理' },
+  { id: 'agents' as const, icon: 'auto-awesome', label: 'AI Agents' },
   { id: 'search' as const, icon: 'search', label: '搜索' },
   { id: 'debug' as const, icon: 'bug-report', label: '运行和调试' },
   { id: 'todos' as const, icon: 'checklist', label: 'TODO' },
@@ -147,7 +157,7 @@ const statusBarInfo = computed(() => {
   }
 })
 
-const navigateTo = (path: string, panel?: 'explorer' | 'git' | 'search' | 'todos' | 'commitAnalysis') => {
+const navigateTo = (path: string, panel?: 'explorer' | 'git' | 'agents' | 'search' | 'todos' | 'commitAnalysis') => {
   router.push(path)
   if (panel) {
     activeSidebarPanel.value = panel
@@ -155,7 +165,7 @@ const navigateTo = (path: string, panel?: 'explorer' | 'git' | 'search' | 'todos
   }
 }
 
-const switchPanel = (panel: 'explorer' | 'git' | 'search' | 'debug' | 'todos' | 'commitAnalysis' | 'fileHistory') => {
+const switchPanel = (panel: 'explorer' | 'git' | 'agents' | 'search' | 'debug' | 'todos' | 'commitAnalysis' | 'fileHistory') => {
   if (activeSidebarPanel.value === panel && sidebarOpen.value) {
     sidebarOpen.value = false
   } else {
@@ -164,11 +174,93 @@ const switchPanel = (panel: 'explorer' | 'git' | 'search' | 'debug' | 'todos' | 
   }
 }
 
+const clampSidebarWidth = (width: number) => Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width))
+
+const startSidebarResize = (event: MouseEvent) => {
+  isResizing.value = true
+  resizeStartX.value = event.clientX
+  resizeStartWidth.value = sidebarWidth.value
+  document.body.classList.add('is-resizing')
+  event.preventDefault()
+}
+
+const handleSidebarResize = (event: MouseEvent) => {
+  if (!isResizing.value) return
+  const nextWidth = resizeStartWidth.value + (event.clientX - resizeStartX.value)
+  sidebarWidth.value = clampSidebarWidth(nextWidth)
+}
+
+const stopSidebarResize = () => {
+  if (!isResizing.value) return
+  isResizing.value = false
+  document.body.classList.remove('is-resizing')
+}
+
+const resetSidebarWidth = () => {
+  sidebarWidth.value = DEFAULT_SIDEBAR_WIDTH
+}
+
+const isEditableTarget = (target: EventTarget | null) => {
+  const element = target as HTMLElement | null
+  if (!element) return false
+  const tagName = element.tagName?.toLowerCase()
+  return tagName === 'input' || tagName === 'textarea' || element.isContentEditable
+}
+
+const handleSidebarShortcut = (event: KeyboardEvent) => {
+  if (isEditableTarget(event.target)) return
+  const isMac = navigator.platform.toUpperCase().includes('MAC')
+  const modifierKey = isMac ? event.metaKey : event.ctrlKey
+  if (!modifierKey || event.shiftKey || event.altKey) return
+
+  switch (event.key) {
+    case '1':
+      event.preventDefault()
+      switchPanel('explorer')
+      break
+    case '2':
+      event.preventDefault()
+      switchPanel('git')
+      break
+    case '3':
+      event.preventDefault()
+      switchPanel('agents')
+      break
+    case '4':
+      event.preventDefault()
+      switchPanel('search')
+      break
+    case '5':
+      event.preventDefault()
+      switchPanel('debug')
+      break
+    case '6':
+      event.preventDefault()
+      switchPanel('todos')
+      break
+    case '7':
+      event.preventDefault()
+      switchPanel('commitAnalysis')
+      break
+    case '8':
+      event.preventDefault()
+      switchPanel('fileHistory')
+      break
+    default:
+      break
+  }
+}
+
 onMounted(async () => {
   // 注册反馈快捷键监听器
   window.addEventListener('keydown', handleFeedbackShortcut)
   // 注册智能模式切换快捷键监听器
   window.addEventListener('keydown', handleIntelligenceModeShortcut)
+  // 注册侧边栏切换快捷键监听器
+  window.addEventListener('keydown', handleSidebarShortcut)
+  // 注册侧边栏拖拽监听器
+  document.addEventListener('mousemove', handleSidebarResize)
+  document.addEventListener('mouseup', stopSidebarResize)
 
   // 从设置初始化智能模式
   await intelligenceStore.initFromSettings(settingsStore.lspMode)
@@ -224,6 +316,11 @@ onUnmounted(() => {
   window.removeEventListener('keydown', handleFeedbackShortcut)
   // 移除智能模式切换快捷键监听器
   window.removeEventListener('keydown', handleIntelligenceModeShortcut)
+  // 移除侧边栏切换快捷键监听器
+  window.removeEventListener('keydown', handleSidebarShortcut)
+  // 移除侧边栏拖拽监听器
+  document.removeEventListener('mousemove', handleSidebarResize)
+  document.removeEventListener('mouseup', stopSidebarResize)
 
   if (unsubscribeProgress) {
     unsubscribeProgress()
@@ -231,6 +328,10 @@ onUnmounted(() => {
   if (unsubscribeLSPStatus) {
     unsubscribeLSPStatus()
   }
+})
+
+watch(sidebarWidth, (value) => {
+  settingsStore.updateUI({ sidebarWidth: clampSidebarWidth(value) })
 })
 </script>
 
@@ -249,6 +350,7 @@ onUnmounted(() => {
         >
           <mdui-icon-folder v-if="panel.icon === 'folder'"></mdui-icon-folder>
           <mdui-icon-source v-else-if="panel.icon === 'source'"></mdui-icon-source>
+          <mdui-icon-auto-awesome v-else-if="panel.icon === 'auto-awesome'"></mdui-icon-auto-awesome>
           <mdui-icon-search v-else-if="panel.icon === 'search'"></mdui-icon-search>
           <mdui-icon-bug-report v-else-if="panel.icon === 'bug-report'"></mdui-icon-bug-report>
           <mdui-icon-checklist v-else-if="panel.icon === 'checklist'"></mdui-icon-checklist>
@@ -292,6 +394,9 @@ onUnmounted(() => {
       <!-- Git 面板 -->
       <GitPanel v-else-if="activeSidebarPanel === 'git'" />
 
+      <!-- AI Agents 面板 -->
+      <AgentsPanel v-else-if="activeSidebarPanel === 'agents'" />
+
       <!-- 搜索面板 (待实现) -->
       <div v-else-if="activeSidebarPanel === 'search'" class="panel-placeholder">
         <div class="panel-header">
@@ -324,7 +429,12 @@ onUnmounted(() => {
       />
 
       <!-- 侧边栏调整手柄 -->
-      <div class="sidebar-resize-handle"></div>
+      <div
+        class="sidebar-resize-handle"
+        :class="{ active: isResizing }"
+        @mousedown="startSidebarResize"
+        @dblclick="resetSidebarWidth"
+      ></div>
     </div>
 
     <!-- 主内容区 -->
@@ -372,7 +482,7 @@ onUnmounted(() => {
     <!-- 底部状态栏 -->
     <div class="status-bar">
       <div class="status-left">
-        <span class="status-item clickable">
+        <span class="status-item clickable" @click="navigateTo('/', 'git')">
           <mdui-icon-source></mdui-icon-source>
           {{ statusBarInfo.branch }}
         </span>
@@ -522,6 +632,15 @@ onUnmounted(() => {
 
 .sidebar-resize-handle:hover {
   background: var(--mdui-color-primary);
+}
+
+.sidebar-resize-handle.active {
+  background: var(--mdui-color-primary);
+}
+
+:global(body.is-resizing) {
+  cursor: col-resize;
+  user-select: none;
 }
 
 /* 面板占位 */

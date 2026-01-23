@@ -4,8 +4,8 @@
  */
 
 import { defineStore } from 'pinia'
-import type { AppSettings, EditorSettings, DevOpsSettings, CICDProvider, TelemetrySettings, LSPSettings } from '@/types/settings'
-import { DEFAULT_APP_SETTINGS, DEFAULT_EDITOR_SETTINGS, DEFAULT_DEVOPS_SETTINGS, DEFAULT_TELEMETRY_SETTINGS, DEFAULT_LSP_SETTINGS } from '@/types/settings'
+import type { AppSettings, EditorSettings, DevOpsSettings, CICDProvider, TelemetrySettings, LSPSettings, UISettings, AISettings } from '@/types/settings'
+import { DEFAULT_APP_SETTINGS, DEFAULT_EDITOR_SETTINGS, DEFAULT_DEVOPS_SETTINGS, DEFAULT_TELEMETRY_SETTINGS, DEFAULT_LSP_SETTINGS, DEFAULT_UI_SETTINGS, DEFAULT_AI_SETTINGS } from '@/types/settings'
 
 // localStorage 键名
 const SETTINGS_STORAGE_KEY = 'lsp-ide-settings'
@@ -98,11 +98,17 @@ export const useSettingsStore = defineStore('settings', {
           if (parsed.devops) {
             this.devops = { ...DEFAULT_DEVOPS_SETTINGS, ...parsed.devops }
           }
+          if (parsed.ai) {
+            this.ai = { ...DEFAULT_AI_SETTINGS, ...parsed.ai }
+          }
           if (parsed.telemetry) {
             this.telemetry = { ...DEFAULT_TELEMETRY_SETTINGS, ...parsed.telemetry }
           }
           if (parsed.lsp) {
             this.lsp = { ...DEFAULT_LSP_SETTINGS, ...parsed.lsp }
+          }
+          if (parsed.ui) {
+            this.ui = { ...DEFAULT_UI_SETTINGS, ...parsed.ui }
           }
         }
       } catch (error) {
@@ -120,8 +126,10 @@ export const useSettingsStore = defineStore('settings', {
         const settings: AppSettings = {
           editor: this.editor,
           devops: this.devops,
+          ai: this.ai,
           telemetry: this.telemetry,
-          lsp: this.lsp
+          lsp: this.lsp,
+          ui: this.ui
         }
         localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings))
       } catch (error) {
@@ -142,6 +150,14 @@ export const useSettingsStore = defineStore('settings', {
      */
     updateDevOps(settings: Partial<DevOpsSettings>) {
       this.devops = { ...this.devops, ...settings }
+      this.save()
+    },
+
+    /**
+     * 更新 AI 设置
+     */
+    updateAI(settings: Partial<AISettings>) {
+      this.ai = { ...this.ai, ...settings }
       this.save()
     },
 
@@ -183,6 +199,7 @@ export const useSettingsStore = defineStore('settings', {
     reset() {
       this.editor = { ...DEFAULT_EDITOR_SETTINGS }
       this.devops = { ...DEFAULT_DEVOPS_SETTINGS }
+      this.ai = { ...DEFAULT_AI_SETTINGS }
       this.save()
     },
 
@@ -245,6 +262,14 @@ export const useSettingsStore = defineStore('settings', {
      */
     updateLSP(settings: Partial<LSPSettings>) {
       this.lsp = { ...this.lsp, ...settings }
+      this.save()
+    },
+
+    /**
+     * 更新 UI 设置
+     */
+    updateUI(settings: Partial<UISettings>) {
+      this.ui = { ...this.ui, ...settings }
       this.save()
     }
   }

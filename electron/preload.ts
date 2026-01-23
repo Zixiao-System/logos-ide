@@ -647,6 +647,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     branches: (repoPath: string): Promise<GitBranch[]> =>
       ipcRenderer.invoke('git:branches', repoPath),
 
+    currentBranch: (repoPath: string): Promise<string> =>
+      ipcRenderer.invoke('git:currentBranch', repoPath),
+
+    defaultBranch: (repoPath: string): Promise<string> =>
+      ipcRenderer.invoke('git:defaultBranch', repoPath),
+
     checkout: (repoPath: string, branchName: string): Promise<void> =>
       ipcRenderer.invoke('git:checkout', repoPath, branchName),
 
@@ -659,6 +665,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // 差异查看
     diff: (repoPath: string, filePath: string, staged: boolean): Promise<string> =>
       ipcRenderer.invoke('git:diff', repoPath, filePath, staged),
+
+    diffStaged: (repoPath: string): Promise<string> =>
+      ipcRenderer.invoke('git:diffStaged', repoPath),
+
+    diffRange: (repoPath: string, base: string, head: string): Promise<string> =>
+      ipcRenderer.invoke('git:diffRange', repoPath, base, head),
 
     showFile: (repoPath: string, filePath: string, ref?: string): Promise<string> =>
       ipcRenderer.invoke('git:showFile', repoPath, filePath, ref),
@@ -1090,6 +1102,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getRepoInfo: (repoPath: string): Promise<{ owner: string; repo: string } | null> =>
       ipcRenderer.invoke('github:getRepoInfo', repoPath),
 
+    // OAuth 设备码登录
+    startDeviceFlow: (scopes?: string[]): Promise<{
+      device_code: string
+      user_code: string
+      verification_uri: string
+      verification_uri_complete?: string
+      expires_in: number
+      interval: number
+    }> => ipcRenderer.invoke('github:oauthStartDeviceFlow', scopes),
+
+    pollDeviceFlow: (deviceCode: string): Promise<{
+      access_token?: string
+      token_type?: string
+      scope?: string
+      error?: string
+      error_description?: string
+      error_uri?: string
+      interval?: number
+    }> => ipcRenderer.invoke('github:oauthPollDeviceFlow', deviceCode),
+
     // 获取 workflows
     getWorkflows: (repoPath: string, token?: string): Promise<any[]> =>
       ipcRenderer.invoke('github:getWorkflows', repoPath, token),
@@ -1169,6 +1201,53 @@ contextBridge.exposeInMainWorld('electronAPI', {
       token?: string
     ): Promise<any> =>
       ipcRenderer.invoke('github:createIssue', repoPath, title, body, labels, token)
+  },
+
+  // ============ GitHub App ============
+  githubApp: {
+    createPR: (params: {
+      repoPath: string
+      title: string
+      body: string
+      head: string
+      base: string
+      appId: string
+      privateKeyPath: string
+    }): Promise<any> => ipcRenderer.invoke('githubApp:createPR', params)
+  },
+
+  // ============ AI / Agents ============
+  ai: {
+    openaiOauthStart: (): Promise<{ state: string; authUrl: string }> =>
+      ipcRenderer.invoke('ai:openaiOauthStart'),
+
+    openaiOauthWait: (state: string): Promise<{
+      accessToken: string
+      refreshToken: string
+      expiresAt: number
+      accountId?: string
+    }> => ipcRenderer.invoke('ai:openaiOauthWait', state),
+
+    anthropicOauthStart: (mode: 'max' | 'console'): Promise<{ requestId: string; authUrl: string }> =>
+      ipcRenderer.invoke('ai:anthropicOauthStart', mode),
+
+    anthropicOauthExchange: (
+      requestId: string,
+      code: string,
+      intent: 'oauth' | 'api'
+    ): Promise<any> => ipcRenderer.invoke('ai:anthropicOauthExchange', requestId, code, intent),
+
+    chat: (request: {
+      provider: 'openai' | 'anthropic'
+      model: string
+      messages: Array<{ role: string; content: string; toolCallId?: string }>
+      tools?: Array<{ name: string; description?: string; parameters?: any }>
+      auth: any
+    }): Promise<{ text: string; toolCalls: Array<{ id: string; name: string; arguments: string }>; updatedAuth?: any }> =>
+      ipcRenderer.invoke('ai:chat', request),
+
+    runCommand: (repoPath: string, command: string): Promise<string> =>
+      ipcRenderer.invoke('ai:runCommand', repoPath, command)
   },
 
   // ============ GitLab CI ============
@@ -2099,12 +2178,16 @@ declare global {
 
         // 分支操作
         branches: (repoPath: string) => Promise<GitBranch[]>
+        currentBranch: (repoPath: string) => Promise<string>
+        defaultBranch: (repoPath: string) => Promise<string>
         checkout: (repoPath: string, branchName: string) => Promise<void>
         createBranch: (repoPath: string, branchName: string, checkout?: boolean) => Promise<void>
         deleteBranch: (repoPath: string, branchName: string, force?: boolean) => Promise<void>
 
         // 差异查看
         diff: (repoPath: string, filePath: string, staged: boolean) => Promise<string>
+        diffStaged: (repoPath: string) => Promise<string>
+        diffRange: (repoPath: string, base: string, head: string) => Promise<string>
         showFile: (repoPath: string, filePath: string, ref?: string) => Promise<string>
 
         // 历史记录
@@ -2432,6 +2515,23 @@ declare global {
       // GitHub Actions
       github: {
         getRepoInfo: (repoPath: string) => Promise<{ owner: string; repo: string } | null>
+        startDeviceFlow: (scopes?: string[]) => Promise<{
+          device_code: string
+          user_code: string
+          verification_uri: string
+          verification_uri_complete?: string
+          expires_in: number
+          interval: number
+        }>
+        pollDeviceFlow: (deviceCode: string) => Promise<{
+          access_token?: string
+          token_type?: string
+          scope?: string
+          error?: string
+          error_description?: string
+          error_uri?: string
+          interval?: number
+        }>
         getWorkflows: (repoPath: string, token?: string) => Promise<any[]>
         getWorkflowRuns: (
           repoPath: string,
@@ -2454,6 +2554,44 @@ declare global {
         createPR: (repoPath: string, title: string, body: string, head: string, base: string, token?: string) => Promise<any>
         listIssues: (repoPath: string, token?: string, state?: 'open' | 'closed' | 'all', perPage?: number) => Promise<any[]>
         createIssue: (repoPath: string, title: string, body: string, labels?: string[], token?: string) => Promise<any>
+      }
+
+      // GitHub App
+      githubApp: {
+        createPR: (params: {
+          repoPath: string
+          title: string
+          body: string
+          head: string
+          base: string
+          appId: string
+          privateKeyPath: string
+        }) => Promise<any>
+      }
+
+      // AI / Agents
+      ai: {
+        openaiOauthStart: () => Promise<{ state: string; authUrl: string }>
+        openaiOauthWait: (state: string) => Promise<{
+          accessToken: string
+          refreshToken: string
+          expiresAt: number
+          accountId?: string
+        }>
+        anthropicOauthStart: (mode: 'max' | 'console') => Promise<{ requestId: string; authUrl: string }>
+        anthropicOauthExchange: (
+          requestId: string,
+          code: string,
+          intent: 'oauth' | 'api'
+        ) => Promise<any>
+        chat: (request: {
+          provider: 'openai' | 'anthropic'
+          model: string
+          messages: Array<{ role: string; content: string; toolCallId?: string }>
+          tools?: Array<{ name: string; description?: string; parameters?: any }>
+          auth: any
+        }) => Promise<{ text: string; toolCalls: Array<{ id: string; name: string; arguments: string }>; updatedAuth?: any }>
+        runCommand: (repoPath: string, command: string) => Promise<string>
       }
 
       // GitLab CI

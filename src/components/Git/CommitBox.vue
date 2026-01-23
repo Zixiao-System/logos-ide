@@ -9,6 +9,7 @@ import { useGitStore } from '@/stores/git'
 // 导入 MDUI 图标
 import '@mdui/icons/check.js'
 import '@mdui/icons/lightbulb.js'
+import '@mdui/icons/auto-awesome.js'
 
 const props = defineProps<{
   /** 提交信息 */
@@ -26,6 +27,8 @@ const emit = defineEmits<{
   commit: []
   /** 暂存所有文件 */
   stageAll: []
+  /** AI 生成提交信息 */
+  generate: []
 }>()
 
 const gitStore = useGitStore()
@@ -155,6 +158,10 @@ const handleBlur = () => {
     showSuggestions.value = false
   }, 200)
 }
+
+const handleGenerate = () => {
+  emit('generate')
+}
 </script>
 
 <template>
@@ -170,6 +177,10 @@ const handleBlur = () => {
         @blur="handleBlur"
         :disabled="loading"
       ></textarea>
+
+      <mdui-button-icon class="ai-button" title="AI 生成提交信息" @click="handleGenerate">
+        <mdui-icon-auto-awesome></mdui-icon-auto-awesome>
+      </mdui-button-icon>
       
       <!-- 建议提示：实心悬浮面板 -->
       <div v-if="showSuggestions && suggestions.length > 0 && !messageValue" class="suggestions solid-floating-panel">
@@ -295,5 +306,11 @@ const handleBlur = () => {
 
 .commit-button {
   width: 100%;
+}
+
+.ai-button {
+  position: absolute;
+  top: 6px;
+  right: 6px;
 }
 </style>

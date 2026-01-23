@@ -195,6 +195,10 @@ logos-ide/
 └── electron-builder.yml
 ```
 
+## Documentation
+
+- GitHub App PR 一键创建配置: [docs/github-app-pr.md](docs/github-app-pr.md)
+
 ## Keyboard Shortcuts
 
 | Action | macOS | Windows/Linux |
@@ -284,5 +288,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 [Website](https://zixiao.io) | [Twitter](https://twitter.com/zixiao_system) | [Discord](https://discord.gg/zixiao)
 
 </div>
-
 

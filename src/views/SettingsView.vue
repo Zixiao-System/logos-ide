@@ -4,8 +4,9 @@
  * 管理应用程序的各项设置
  */
 
-import { computed, ref } from 'vue'
+import { computed, ref, onUnmounted } from 'vue'
 import { useSettingsStore } from '@/stores/settings'
+import { useFileExplorerStore } from '@/stores/fileExplorer'
 import { useThemeStore } from '@/stores/theme'
 import type { CICDProvider } from '@/types/settings'
 
@@ -17,8 +18,11 @@ import '@mdui/icons/visibility-off.js'
 import '@mdui/icons/palette.js'
 import '@mdui/icons/refresh.js'
 import '@mdui/icons/check.js'
+import '@mdui/icons/open-in-new.js'
+import '@mdui/icons/content-copy.js'
 
 const settingsStore = useSettingsStore()
+const fileExplorerStore = useFileExplorerStore()
 const themeStore = useThemeStore()
 
 // 壁纸图片列表（从 GitHub 获取）
@@ -125,6 +129,163 @@ const slackWebhookUrl = computed({
   set: (value: string) => settingsStore.updateDevOps({ slackWebhookUrl: value })
 })
 
+const githubAppId = computed({
+  get: () => settingsStore.devops.githubAppId,
+  set: (value: string) => settingsStore.updateDevOps({ githubAppId: value })
+})
+
+const githubAppPrivateKeyPath = computed({
+  get: () => settingsStore.devops.githubAppPrivateKeyPath,
+  set: (value: string) => settingsStore.updateDevOps({ githubAppPrivateKeyPath: value })
+})
+
+const githubAppDocUrl = computed(() => {
+  const rootPath = fileExplorerStore.rootPath
+  if (rootPath) {
+    const normalized = rootPath.replace(/\\/g, '/')
+    return `file://${encodeURI(`${normalized}/docs/github-app-pr.md`)}`
+  }
+  return 'https://github.com/Zixiao-System/logos-ide/blob/main/docs/github-app-pr.md'
+})
+
+// AI 设置
+const aiProvider = computed({
+  get: () => settingsStore.ai.provider,
+  set: (value: string) => settingsStore.updateAI({ provider: value as 'openai' | 'anthropic' })
+})
+
+const openaiModel = computed({
+  get: () => settingsStore.ai.openai.model,
+  set: (value: string) => settingsStore.updateAI({
+    openai: { ...settingsStore.ai.openai, model: value }
+  })
+})
+
+const anthropicModel = computed({
+  get: () => settingsStore.ai.anthropic.model,
+  set: (value: string) => settingsStore.updateAI({
+    anthropic: { ...settingsStore.ai.anthropic, model: value }
+  })
+})
+
+type GitHubOAuthStatus = 'idle' | 'pending' | 'authorized' | 'expired' | 'error'
+
+interface GitHubOAuthState {
+  deviceCode: string
+  userCode: string
+  verificationUri: string
+  verificationUriComplete?: string
+  expiresIn: number
+  interval: number
+  startedAt: number
+  status: GitHubOAuthStatus
+  error?: string
+}
+
+const githubOauthDialogOpen = ref(false)
+const githubOauthState = ref<GitHubOAuthState | null>(null)
+const githubOauthError = ref('')
+let githubOauthTimer: ReturnType<typeof setTimeout> | null = null
+
+const stopGitHubOAuthPolling = () => {
+  if (githubOauthTimer) {
+    clearTimeout(githubOauthTimer)
+    githubOauthTimer = null
+  }
+}
+
+const openGitHubVerification = async () => {
+  const state = githubOauthState.value
+  if (!state) return
+  const url = state.verificationUriComplete || state.verificationUri
+  await window.electronAPI?.openExternal(url)
+}
+
+const copyGitHubUserCode = async () => {
+  const state = githubOauthState.value
+  if (!state) return
+  await navigator.clipboard.writeText(state.userCode)
+}
+
+const scheduleGitHubOAuthPoll = (intervalSeconds: number) => {
+  stopGitHubOAuthPolling()
+  githubOauthTimer = setTimeout(pollGitHubOAuth, Math.max(intervalSeconds, 5) * 1000)
+}
+
+const pollGitHubOAuth = async () => {
+  const state = githubOauthState.value
+  if (!state || state.status !== 'pending') return
+
+  const elapsed = Date.now() - state.startedAt
+  if (elapsed > state.expiresIn * 1000) {
+    state.status = 'expired'
+    stopGitHubOAuthPolling()
+    return
+  }
+
+  try {
+    const response = await window.electronAPI?.github.pollDeviceFlow(state.deviceCode)
+    if (response?.access_token) {
+      settingsStore.setGitHubToken(response.access_token)
+      state.status = 'authorized'
+      stopGitHubOAuthPolling()
+      return
+    }
+
+    if (response?.error === 'authorization_pending') {
+      scheduleGitHubOAuthPoll(state.interval)
+      return
+    }
+
+    if (response?.error === 'slow_down') {
+      state.interval += 5
+      scheduleGitHubOAuthPoll(state.interval)
+      return
+    }
+
+    state.status = 'error'
+    state.error = response?.error_description || response?.error || '授权失败'
+    stopGitHubOAuthPolling()
+  } catch (error) {
+    state.status = 'error'
+    state.error = (error as Error).message
+    stopGitHubOAuthPolling()
+  }
+}
+
+const startGitHubOAuth = async () => {
+  githubOauthError.value = ''
+  try {
+    const response = await window.electronAPI?.github.startDeviceFlow(['repo', 'workflow', 'read:user'])
+    if (!response) {
+      githubOauthError.value = '无法启动 GitHub OAuth'
+      return
+    }
+
+    githubOauthState.value = {
+      deviceCode: response.device_code,
+      userCode: response.user_code,
+      verificationUri: response.verification_uri,
+      verificationUriComplete: response.verification_uri_complete,
+      expiresIn: response.expires_in,
+      interval: response.interval,
+      startedAt: Date.now(),
+      status: 'pending'
+    }
+    githubOauthDialogOpen.value = true
+    await openGitHubVerification()
+    scheduleGitHubOAuthPoll(response.interval)
+  } catch (error) {
+    githubOauthError.value = (error as Error).message
+  }
+}
+
+const handleGitHubOauthDialogClosed = () => {
+  githubOauthDialogOpen.value = false
+  stopGitHubOAuthPolling()
+  githubOauthState.value = null
+}
+
 // 遥测设置
 const telemetryEnabled = computed({
   get: () => settingsStore.telemetry.enabled,
@@ -171,6 +332,10 @@ function resetColorScheme() {
   customColorInput.value = '#6750a4'
   selectedWallpaper.value = null
 }
+
+onUnmounted(() => {
+  stopGitHubOAuthPolling()
+})
 </script>
 
 <template>
@@ -346,6 +511,52 @@ function resetColorScheme() {
       </div>
     </mdui-card>
 
+    <!-- AI / Agents 设置 -->
+    <mdui-card variant="outlined" class="settings-section">
+      <h2>AI / Agents</h2>
+
+      <div class="setting-item">
+        <div class="setting-info">
+          <span class="setting-label">默认 Provider</span>
+          <span class="setting-description">Agents、提交信息与 PR 生成使用的默认模型提供方</span>
+        </div>
+        <mdui-select :value="aiProvider" @change="(e: any) => aiProvider = e.target.value">
+          <mdui-menu-item value="openai">OpenAI</mdui-menu-item>
+          <mdui-menu-item value="anthropic">Anthropic</mdui-menu-item>
+        </mdui-select>
+      </div>
+
+      <mdui-divider></mdui-divider>
+
+      <div class="setting-item">
+        <div class="setting-info">
+          <span class="setting-label">OpenAI 模型</span>
+          <span class="setting-description">用于 Chat / Commit / PR 生成</span>
+        </div>
+        <mdui-text-field
+          :value="openaiModel"
+          variant="outlined"
+          placeholder="gpt-4.1"
+          @input="(e: any) => openaiModel = e.target.value"
+        ></mdui-text-field>
+      </div>
+
+      <mdui-divider></mdui-divider>
+
+      <div class="setting-item">
+        <div class="setting-info">
+          <span class="setting-label">Anthropic 模型</span>
+          <span class="setting-description">用于 Chat / Commit / PR 生成</span>
+        </div>
+        <mdui-text-field
+          :value="anthropicModel"
+          variant="outlined"
+          placeholder="claude-3-5-sonnet-20240620"
+          @input="(e: any) => anthropicModel = e.target.value"
+        ></mdui-text-field>
+      </div>
+    </mdui-card>
+
     <!-- DevOps 设置 -->
     <mdui-card variant="outlined" class="settings-section">
       <h2>DevOps / CI/CD</h2>
@@ -381,6 +592,20 @@ function resetColorScheme() {
             placeholder="ghp_xxxxxxxxxxxx"
             @input="(e: any) => githubToken = e.target.value"
           ></mdui-text-field>
+        </div>
+
+        <mdui-divider></mdui-divider>
+        <div class="setting-item">
+          <div class="setting-info">
+            <span class="setting-label">GitHub OAuth</span>
+            <span class="setting-description">使用 OAuth 授权自动获取 Token</span>
+          </div>
+          <mdui-button variant="outlined" @click="startGitHubOAuth">
+            GitHub 登录
+          </mdui-button>
+        </div>
+        <div v-if="githubOauthError" class="oauth-error">
+          {{ githubOauthError }}
         </div>
       </template>
 
@@ -440,6 +665,45 @@ function resetColorScheme() {
           @input="(e: any) => slackWebhookUrl = e.target.value"
         ></mdui-text-field>
       </div>
+
+      <mdui-divider></mdui-divider>
+      <div class="setting-item">
+        <div class="setting-info">
+          <span class="setting-label">GitHub App ID</span>
+          <span class="setting-description">用于一键创建 PR</span>
+        </div>
+        <mdui-text-field
+          :value="githubAppId"
+          variant="outlined"
+          placeholder="2713552"
+          @input="(e: any) => githubAppId = e.target.value"
+        ></mdui-text-field>
+      </div>
+
+      <mdui-divider></mdui-divider>
+      <div class="setting-item">
+        <div class="setting-info">
+          <span class="setting-label">GitHub App 私钥路径</span>
+          <span class="setting-description">本地 PEM 文件路径</span>
+        </div>
+        <mdui-text-field
+          :value="githubAppPrivateKeyPath"
+          variant="outlined"
+          placeholder="/Users/you/Downloads/app.private-key.pem"
+          @input="(e: any) => githubAppPrivateKeyPath = e.target.value"
+        ></mdui-text-field>
+      </div>
+
+      <mdui-divider></mdui-divider>
+      <div class="setting-item doc-item">
+        <div class="setting-info">
+          <span class="setting-label">配置文档</span>
+          <span class="setting-description">GitHub App 一键创建 PR 配置说明</span>
+        </div>
+      </div>
+      <div class="doc-webview">
+        <webview :src="githubAppDocUrl" class="doc-frame"></webview>
+      </div>
     </mdui-card>
 
     <!-- 隐私设置 -->
@@ -473,6 +737,42 @@ function resetColorScheme() {
         </div>
       </div>
     </mdui-card>
+
+    <!-- GitHub OAuth 对话框 -->
+    <mdui-dialog
+      :open="githubOauthDialogOpen"
+      @closed="handleGitHubOauthDialogClosed"
+    >
+      <span slot="headline">GitHub 授权</span>
+      <div slot="description" class="oauth-dialog">
+        <p>打开 GitHub 授权页面并输入验证码。</p>
+        <div class="oauth-code">
+          <span class="code-label">验证码</span>
+          <span class="code-value">{{ githubOauthState?.userCode }}</span>
+          <mdui-button-icon @click="copyGitHubUserCode" title="复制验证码">
+            <mdui-icon-content-copy></mdui-icon-content-copy>
+          </mdui-button-icon>
+        </div>
+        <div class="oauth-link">
+          <span>{{ githubOauthState?.verificationUri }}</span>
+          <mdui-button variant="text" @click="openGitHubVerification">
+            <mdui-icon-open-in-new slot="icon"></mdui-icon-open-in-new>
+            打开授权页
+          </mdui-button>
+        </div>
+        <div class="oauth-status" :class="githubOauthState?.status">
+          <span v-if="githubOauthState?.status === 'pending'">等待授权中...</span>
+          <span v-else-if="githubOauthState?.status === 'authorized'">授权成功，已保存 Token</span>
+          <span v-else-if="githubOauthState?.status === 'expired'">验证码已过期，请重新开始</span>
+          <span v-else-if="githubOauthState?.status === 'error'">
+            授权失败：{{ githubOauthState?.error || '未知错误' }}
+          </span>
+        </div>
+      </div>
+      <mdui-button slot="action" variant="text" @click="handleGitHubOauthDialogClosed">
+        关闭
+      </mdui-button>
+    </mdui-dialog>
   </div>
 </template>
 
@@ -705,5 +1005,74 @@ mdui-select {
   height: 20px;
   border-radius: 4px;
   border: 1px solid var(--mdui-color-outline);
+}
+
+.oauth-error {
+  color: var(--mdui-color-error);
+  font-size: 0.875rem;
+  margin-top: 8px;
+}
+
+.oauth-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.oauth-code {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--mdui-color-surface-container);
+}
+
+.code-label {
+  font-size: 0.875rem;
+  color: var(--mdui-color-on-surface-variant);
+}
+
+.code-value {
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
+.oauth-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.875rem;
+  color: var(--mdui-color-on-surface-variant);
+  word-break: break-all;
+}
+
+.oauth-status {
+  font-size: 0.875rem;
+  color: var(--mdui-color-on-surface-variant);
+}
+
+.oauth-status.authorized {
+  color: var(--mdui-color-primary);
+}
+
+.oauth-status.error,
+.oauth-status.expired {
+  color: var(--mdui-color-error);
+}
+
+.doc-webview {
+  height: 360px;
+  border: 1px solid var(--mdui-color-outline-variant);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--mdui-color-surface-container);
+}
+
+.doc-frame {
+  width: 100%;
+  height: 100%;
+  border: none;
 }
 </style>
