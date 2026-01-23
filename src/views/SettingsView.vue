@@ -120,6 +120,11 @@ const buildNotifications = computed({
   set: (value: boolean) => settingsStore.updateDevOps({ buildNotifications: value })
 })
 
+const slackWebhookUrl = computed({
+  get: () => settingsStore.devops.slackWebhookUrl,
+  set: (value: string) => settingsStore.updateDevOps({ slackWebhookUrl: value })
+})
+
 // 遥测设置
 const telemetryEnabled = computed({
   get: () => settingsStore.telemetry.enabled,
@@ -419,6 +424,21 @@ function resetColorScheme() {
           <span class="setting-description">流水线完成时通知</span>
         </div>
         <mdui-switch :checked="buildNotifications" @change="buildNotifications = !buildNotifications"></mdui-switch>
+      </div>
+
+      <!-- Slack 集成 -->
+      <mdui-divider></mdui-divider>
+      <div class="setting-item">
+        <div class="setting-info">
+          <span class="setting-label">Slack Webhook URL</span>
+          <span class="setting-description">用于发送构建通知到 Slack (可选)</span>
+        </div>
+        <mdui-text-field
+          :value="slackWebhookUrl"
+          variant="outlined"
+          placeholder="https://hooks.slack.com/services/..."
+          @input="(e: any) => slackWebhookUrl = e.target.value"
+        ></mdui-text-field>
       </div>
     </mdui-card>
 

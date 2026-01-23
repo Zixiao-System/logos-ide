@@ -1,11 +1,13 @@
 /**
  * 智能模式状态管理
  * 负责管理 Basic/Smart 模式切换、索引进度、服务器状态
+ * 支持 .logos 项目级智能模式设置（.logos/settings.json）
  */
 
 import { defineStore } from 'pinia'
 import type { IndexingProgress, LanguageServerStatus, ServerStatus } from '@/types/intelligence'
 import { getIntelligenceManager } from '@/services/lsp'
+import { useSettingsStore } from './settings'
 
 /** 智能模式类型 */
 export type IntelligenceMode = 'basic' | 'smart'
@@ -197,8 +199,10 @@ export const useIntelligenceStore = defineStore('intelligence', {
   actions: {
     /**
      * 切换智能模式
+     * @param mode - basic | smart
+     * @param opts.skipLocalStorage - 为 true 时不写入 localStorage（如加载 .logos 项目设置时）
      */
-    async setMode(mode: IntelligenceMode) {
+    async setMode(mode: IntelligenceMode, opts?: { skipLocalStorage?: boolean }) {
       if (this.mode === mode) return
       if (this.isSwitching) return
 
@@ -216,8 +220,8 @@ export const useIntelligenceStore = defineStore('intelligence', {
 
         this.mode = mode
 
-        // 保存设置到 localStorage (持久化)
-        if (typeof window !== 'undefined' && window.localStorage) {
+        // 保存设置到 localStorage（全局持久化），加载项目设置时跳过
+        if (!opts?.skipLocalStorage && typeof window !== 'undefined' && window.localStorage) {
           try {
             const settingsKey = 'lsp-ide-settings'
             const savedSettings = localStorage.getItem(settingsKey)
@@ -243,6 +247,53 @@ export const useIntelligenceStore = defineStore('intelligence', {
         throw error
       } finally {
         this.isSwitching = false
+      }
+    },
+
+    /**
+     * 从 .logos 项目设置加载智能模式（.logos/settings.json）
+     * 合并项目级与全局设置，项目优先；仅更新状态与模式，不写回 .logos
+     */
+    async loadFromProject(projectRoot: string): Promise<void> {
+      try {
+        const settingsStore = useSettingsStore()
+        const global = {
+          preferredMode: settingsStore.lspMode,
+          autoSelect: this.autoSelect,
+          smartModeThreshold: { ...this.smartModeThreshold }
+        }
+        const merged = await window.electronAPI?.intelligence?.loadMergedSettings?.(projectRoot, global)
+        if (!merged) return
+
+        if (merged.autoSelect !== undefined) this.autoSelect = merged.autoSelect
+        if (merged.smartModeThreshold) {
+          this.smartModeThreshold = {
+            ...this.smartModeThreshold,
+            ...merged.smartModeThreshold
+          }
+        }
+        const mode = merged.preferredMode ?? this.mode
+        if (mode !== this.mode) {
+          await this.setMode(mode, { skipLocalStorage: true })
+        }
+      } catch (error) {
+        console.error('[Intelligence] Failed to load .logos project settings:', error)
+      }
+    },
+
+    /**
+     * 将当前智能模式设置持久化到 .logos（.logos/settings.json）
+     * 在用户于 UI 中显式修改模式/自动选择时调用
+     */
+    async persistToProject(projectRoot: string): Promise<void> {
+      try {
+        await window.electronAPI?.intelligence?.saveProjectSettings?.(projectRoot, {
+          preferredMode: this.mode,
+          autoSelect: this.autoSelect,
+          smartModeThreshold: { ...this.smartModeThreshold }
+        })
+      } catch (error) {
+        console.error('[Intelligence] Failed to persist .logos project settings:', error)
       }
     },
 

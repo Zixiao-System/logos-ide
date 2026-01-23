@@ -93,7 +93,7 @@ const copyHash = async () => {
     <Transition name="fade">
       <div
         v-if="visible"
-        class="blame-hover-card"
+        class="blame-hover-card solid-floating-panel"
         :style="cardStyle"
         @mouseenter="$emit('close')"
       >
@@ -186,12 +186,15 @@ const copyHash = async () => {
   position: fixed;
   z-index: 10000;
   width: 380px;
-  background: var(--mdui-color-surface-container-high);
+  background: var(--mdui-color-surface-container-high, #2d2d2d);
+  background-color: var(--mdui-color-surface-container-high, #2d2d2d);
   border: 1px solid var(--mdui-color-outline-variant);
   border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
   overflow: hidden;
   pointer-events: auto;
+  opacity: 1;
+  backdrop-filter: none;
 }
 
 .card-header {

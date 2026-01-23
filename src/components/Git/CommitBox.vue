@@ -171,8 +171,8 @@ const handleBlur = () => {
         :disabled="loading"
       ></textarea>
       
-      <!-- 建议提示 -->
-      <div v-if="showSuggestions && suggestions.length > 0 && !messageValue" class="suggestions">
+      <!-- 建议提示：实心悬浮面板 -->
+      <div v-if="showSuggestions && suggestions.length > 0 && !messageValue" class="suggestions solid-floating-panel">
         <div class="suggestions-header">
           <mdui-icon-lightbulb></mdui-icon-lightbulb>
           <span>建议</span>
@@ -234,12 +234,15 @@ const handleBlur = () => {
   left: 0;
   right: 0;
   margin-top: 4px;
-  background: var(--mdui-color-surface-container);
+  background: var(--mdui-color-surface-container-high, #2d2d2d);
+  background-color: var(--mdui-color-surface-container-high, #2d2d2d);
   border: 1px solid var(--mdui-color-outline-variant);
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
   z-index: 100;
   overflow: hidden;
+  opacity: 1;
+  backdrop-filter: none;
 }
 
 .suggestions-header {
@@ -252,7 +255,9 @@ const handleBlur = () => {
   color: var(--mdui-color-on-surface-variant);
   text-transform: uppercase;
   border-bottom: 1px solid var(--mdui-color-outline-variant);
-  background: var(--mdui-color-surface-container-high);
+  background: var(--mdui-color-surface-container, #252525);
+  background-color: var(--mdui-color-surface-container, #252525);
+  opacity: 1;
 }
 
 .suggestions-header mdui-icon-lightbulb {

@@ -337,4 +337,119 @@ export function registerGitHubHandlers() {
 
     return { url, token: resolvedToken }
   })
+
+  // ============ Pull Requests ============
+
+  // 列出 PRs
+  ipcMain.handle('github:listPRs', async (
+    _event,
+    repoPath: string,
+    token?: string,
+    state: 'open' | 'closed' | 'all' = 'open',
+    perPage: number = 30
+  ) => {
+    const repoInfo = await getRepoInfo(repoPath)
+    if (!repoInfo) {
+      throw new Error('Cannot determine GitHub repository from remote URL')
+    }
+
+    const resolvedToken = await getToken(token, repoPath)
+    if (!resolvedToken) {
+      throw new Error('GitHub token not found. Please configure it in settings.')
+    }
+
+    const response = await githubRequest<any[]>(
+      `/repos/${repoInfo.owner}/${repoInfo.repo}/pulls?state=${state}&per_page=${perPage}`,
+      resolvedToken
+    )
+
+    return response
+  })
+
+  // 创建 PR
+  ipcMain.handle('github:createPR', async (
+    _event,
+    repoPath: string,
+    title: string,
+    body: string,
+    head: string,
+    base: string,
+    token?: string
+  ) => {
+    const repoInfo = await getRepoInfo(repoPath)
+    if (!repoInfo) {
+      throw new Error('Cannot determine GitHub repository from remote URL')
+    }
+
+    const resolvedToken = await getToken(token, repoPath)
+    if (!resolvedToken) {
+      throw new Error('GitHub token not found. Please configure it in settings.')
+    }
+
+    const response = await githubRequest<any>(
+      `/repos/${repoInfo.owner}/${repoInfo.repo}/pulls`,
+      resolvedToken,
+      'POST',
+      { title, body, head, base }
+    )
+
+    return response
+  })
+
+  // ============ Issues ============
+
+  // 列出 Issues
+  ipcMain.handle('github:listIssues', async (
+    _event,
+    repoPath: string,
+    token?: string,
+    state: 'open' | 'closed' | 'all' = 'open',
+    perPage: number = 30
+  ) => {
+    const repoInfo = await getRepoInfo(repoPath)
+    if (!repoInfo) {
+      throw new Error('Cannot determine GitHub repository from remote URL')
+    }
+
+    const resolvedToken = await getToken(token, repoPath)
+    if (!resolvedToken) {
+      throw new Error('GitHub token not found. Please configure it in settings.')
+    }
+
+    const response = await githubRequest<any[]>(
+      `/repos/${repoInfo.owner}/${repoInfo.repo}/issues?state=${state}&per_page=${perPage}`,
+      resolvedToken
+    )
+
+    return response
+  })
+
+  // 创建 Issue
+  ipcMain.handle('github:createIssue', async (
+    _event,
+    repoPath: string,
+    title: string,
+    body: string,
+    labels?: string[],
+    token?: string
+  ) => {
+    const repoInfo = await getRepoInfo(repoPath)
+    if (!repoInfo) {
+      throw new Error('Cannot determine GitHub repository from remote URL')
+    }
+
+    const resolvedToken = await getToken(token, repoPath)
+    if (!resolvedToken) {
+      throw new Error('GitHub token not found. Please configure it in settings.')
+    }
+
+    const response = await githubRequest<any>(
+      `/repos/${repoInfo.owner}/${repoInfo.repo}/issues`,
+      resolvedToken,
+      'POST',
+      { title, body, ...(labels ? { labels } : {}) }
+    )
+
+    return response
+  })
 }

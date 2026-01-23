@@ -305,6 +305,9 @@ onMounted(async () => {
     debugStore.setWorkspaceFolder(fileExplorerStore.rootPath)
     await debugStore.loadLaunchConfigurations()
 
+    // 加载 .logos 项目级智能模式设置（.logos/settings.json），项目优先
+    await intelligenceStore.loadFromProject(fileExplorerStore.rootPath)
+
     // 分析项目并根据 autoSelect 决定是否自动切换模式
     if (intelligenceStore.autoSelect) {
       await intelligenceStore.autoDetectMode()
@@ -554,11 +557,13 @@ watch(() => fileExplorerStore.rootPath, async (newPath, oldPath) => {
     debugStore.setWorkspaceFolder(newPath)
     await debugStore.loadLaunchConfigurations()
 
+    // 加载 .logos 项目级智能模式设置
+    await intelligenceStore.loadFromProject(newPath)
+
     // 分析项目并根据 autoSelect 决定是否自动切换模式
     if (intelligenceStore.autoSelect) {
       await intelligenceStore.autoDetectMode()
     } else {
-      // 即使不自动切换，也分析项目以显示信息
       await intelligenceStore.analyzeProject()
     }
   } else {

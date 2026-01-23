@@ -35,6 +35,8 @@ export interface DevOpsSettings {
   gitlabUrl: string
   /** 构建完成通知 */
   buildNotifications: boolean
+  /** Slack Webhook URL (用于发送通知) */
+  slackWebhookUrl: string
 }
 
 /** 遥测设置 */
@@ -81,7 +83,8 @@ export const DEFAULT_DEVOPS_SETTINGS: DevOpsSettings = {
   githubToken: '',
   gitlabToken: '',
   gitlabUrl: 'https://gitlab.com',
-  buildNotifications: true
+  buildNotifications: true,
+  slackWebhookUrl: ''
 }
 
 /** 默认遥测设置 */

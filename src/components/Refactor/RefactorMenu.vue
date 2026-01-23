@@ -80,7 +80,7 @@ const shortcuts: Record<string, string> = {
 </script>
 
 <template>
-  <div class="refactor-menu">
+  <div class="refactor-menu solid-floating-panel">
     <div class="menu-header">
       <mdui-icon-code></mdui-icon-code>
       重构
@@ -175,9 +175,12 @@ const shortcuts: Record<string, string> = {
 .refactor-menu {
   min-width: 280px;
   padding: 8px 0;
-  background: var(--mdui-color-surface-container);
+  background: var(--mdui-color-surface-container-high, #2d2d2d);
+  background-color: var(--mdui-color-surface-container-high, #2d2d2d);
   border-radius: 8px;
-  box-shadow: var(--mdui-elevation-level2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  opacity: 1;
+  backdrop-filter: none;
 }
 
 .menu-header {

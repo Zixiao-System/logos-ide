@@ -27,7 +27,7 @@
       <Transition name="menu-fade">
         <div
           v-if="showMenu"
-          class="mode-menu"
+          class="mode-menu solid-floating-panel"
           :style="menuStyle"
           @click.stop
         >
@@ -127,6 +127,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useIntelligenceStore, type IntelligenceMode } from '@/stores/intelligence'
+import { useFileExplorerStore } from '@/stores/fileExplorer'
 
 // 导入需要的图标
 import '@mdui/icons/flash-on.js'
@@ -138,6 +139,7 @@ import '@mdui/icons/auto-fix-high.js'
 import '@mdui/icons/info.js'
 
 const intelligenceStore = useIntelligenceStore()
+const fileExplorerStore = useFileExplorerStore()
 
 const showMenu = ref(false)
 const triggerRef = ref<HTMLElement | null>(null)
@@ -183,12 +185,18 @@ const selectMode = async (mode: IntelligenceMode) => {
   showMenu.value = false
   if (intelligenceStore.mode !== mode) {
     await intelligenceStore.setMode(mode)
+    if (fileExplorerStore.rootPath) {
+      await intelligenceStore.persistToProject(fileExplorerStore.rootPath)
+    }
   }
 }
 
 /** 切换自动选择 */
 const toggleAutoSelect = async () => {
   await intelligenceStore.setAutoSelect(!intelligenceStore.autoSelect)
+  if (fileExplorerStore.rootPath) {
+    await intelligenceStore.persistToProject(fileExplorerStore.rootPath)
+  }
 }
 
 /** 截断文件路径 */
@@ -292,16 +300,19 @@ onUnmounted(() => {
   to { transform: rotate(360deg); }
 }
 
-/* 菜单样式 */
+/* 菜单样式：实心悬浮面板，不透明 */
 .mode-menu {
   position: fixed;
   min-width: 280px;
-  background: var(--mdui-color-surface-container-high);
+  background: var(--mdui-color-surface-container-high, #2d2d2d);
+  background-color: var(--mdui-color-surface-container-high, #2d2d2d);
   border: 1px solid var(--mdui-color-outline-variant);
   border-radius: 8px;
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
   padding: 8px;
   z-index: 9999;
+  opacity: 1;
+  backdrop-filter: none;
 }
 
 .menu-item {

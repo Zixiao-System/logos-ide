@@ -62,3 +62,11 @@ pre {
 mdui-button-icon + mdui-button-icon {
   margin-left: 4px;
 }
+
+/* 实心悬浮面板：配置、建议等浮层不透明，不用 backdrop 透明效果 */
+.solid-floating-panel {
+  opacity: 1 !important;
+  backdrop-filter: none !important;
+  background: var(--mdui-color-surface-container-high, #2d2d2d) !important;
+  background-color: var(--mdui-color-surface-container-high, #2d2d2d) !important;
+}

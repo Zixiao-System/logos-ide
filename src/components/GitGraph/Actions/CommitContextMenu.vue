@@ -68,7 +68,7 @@ function handleClickOutside(event: MouseEvent) {
         @contextmenu.prevent="emit('close')"
       >
         <div
-          class="commit-context-menu"
+          class="commit-context-menu solid-floating-panel"
           :style="{ left: position.x + 'px', top: position.y + 'px' }"
         >
           <!-- 头部: commit 信息 -->
@@ -114,10 +114,13 @@ function handleClickOutside(event: MouseEvent) {
 .commit-context-menu {
   position: fixed;
   min-width: 200px;
-  background: var(--mdui-color-surface-container-high);
+  background: var(--mdui-color-surface-container-high, #2d2d2d);
+  background-color: var(--mdui-color-surface-container-high, #2d2d2d);
   border: 1px solid var(--mdui-color-outline-variant);
   border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  opacity: 1;
+  backdrop-filter: none;
   overflow: hidden;
 }
 

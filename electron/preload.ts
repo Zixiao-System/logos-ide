@@ -1131,7 +1131,44 @@ contextBridge.exposeInMainWorld('electronAPI', {
       runId: number,
       token?: string
     ): Promise<{ url: string; token: string }> =>
-      ipcRenderer.invoke('github:getWorkflowRunLogsUrl', repoPath, runId, token)
+      ipcRenderer.invoke('github:getWorkflowRunLogsUrl', repoPath, runId, token),
+
+    // ============ Pull Requests ============
+    listPRs: (
+      repoPath: string,
+      token?: string,
+      state?: 'open' | 'closed' | 'all',
+      perPage?: number
+    ): Promise<any[]> =>
+      ipcRenderer.invoke('github:listPRs', repoPath, token, state, perPage),
+
+    createPR: (
+      repoPath: string,
+      title: string,
+      body: string,
+      head: string,
+      base: string,
+      token?: string
+    ): Promise<any> =>
+      ipcRenderer.invoke('github:createPR', repoPath, title, body, head, base, token),
+
+    // ============ Issues ============
+    listIssues: (
+      repoPath: string,
+      token?: string,
+      state?: 'open' | 'closed' | 'all',
+      perPage?: number
+    ): Promise<any[]> =>
+      ipcRenderer.invoke('github:listIssues', repoPath, token, state, perPage),
+
+    createIssue: (
+      repoPath: string,
+      title: string,
+      body: string,
+      labels?: string[],
+      token?: string
+    ): Promise<any> =>
+      ipcRenderer.invoke('github:createIssue', repoPath, title, body, labels, token)
   },
 
   // ============ GitLab CI ============
@@ -2413,6 +2450,10 @@ declare global {
         cancelWorkflowRun: (repoPath: string, runId: number, token?: string) => Promise<{ success: boolean }>
         rerunWorkflow: (repoPath: string, runId: number, token?: string) => Promise<{ success: boolean }>
         getWorkflowRunLogsUrl: (repoPath: string, runId: number, token?: string) => Promise<{ url: string; token: string }>
+        listPRs: (repoPath: string, token?: string, state?: 'open' | 'closed' | 'all', perPage?: number) => Promise<any[]>
+        createPR: (repoPath: string, title: string, body: string, head: string, base: string, token?: string) => Promise<any>
+        listIssues: (repoPath: string, token?: string, state?: 'open' | 'closed' | 'all', perPage?: number) => Promise<any[]>
+        createIssue: (repoPath: string, title: string, body: string, labels?: string[], token?: string) => Promise<any>
       }
 
       // GitLab CI
