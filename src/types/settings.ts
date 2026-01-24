@@ -29,6 +29,8 @@ export interface DevOpsSettings {
   provider: CICDProvider
   /** GitHub Personal Access Token */
   githubToken: string
+  /** GitHub OAuth Client ID (Device Flow) */
+  githubOAuthClientId: string
   /** GitLab Personal Access Token */
   gitlabToken: string
   /** GitLab 服务器地址 (支持自托管) */
@@ -81,6 +83,7 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
 export const DEFAULT_DEVOPS_SETTINGS: DevOpsSettings = {
   provider: 'none',
   githubToken: '',
+  githubOAuthClientId: '',
   gitlabToken: '',
   gitlabUrl: 'https://gitlab.com',
   buildNotifications: true,

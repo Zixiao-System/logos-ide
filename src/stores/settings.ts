@@ -162,6 +162,14 @@ export const useSettingsStore = defineStore('settings', {
     },
 
     /**
+     * 设置 GitHub OAuth Client ID
+     */
+    setGitHubOAuthClientId(clientId: string) {
+      this.devops.githubOAuthClientId = clientId
+      this.save()
+    },
+
+    /**
      * 设置 GitLab Token
      */
     setGitLabToken(token: string) {

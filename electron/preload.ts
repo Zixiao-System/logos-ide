@@ -1146,6 +1146,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // ============ GitHub Actions ============
   github: {
+    // OAuth Device Flow
+    deviceFlowStart: (clientId: string, scopes?: string[]): Promise<{
+      deviceCode: string
+      userCode: string
+      verificationUri: string
+      verificationUriComplete?: string
+      expiresIn: number
+      interval: number
+    }> => ipcRenderer.invoke('github:deviceFlowStart', clientId, scopes),
+
+    deviceFlowPoll: (clientId: string, deviceCode: string): Promise<{
+      status: 'authorized' | 'pending' | 'slow_down' | 'expired' | 'denied' | 'error'
+      accessToken?: string
+      tokenType?: string
+      scope?: string
+      error?: string
+      errorDescription?: string
+      errorUri?: string
+    }> => ipcRenderer.invoke('github:deviceFlowPoll', clientId, deviceCode),
+
     // 获取仓库信息
     getRepoInfo: (repoPath: string): Promise<{ owner: string; repo: string } | null> =>
       ipcRenderer.invoke('github:getRepoInfo', repoPath),
@@ -2509,6 +2529,23 @@ declare global {
 
       // GitHub Actions
       github: {
+        deviceFlowStart: (clientId: string, scopes?: string[]) => Promise<{
+          deviceCode: string
+          userCode: string
+          verificationUri: string
+          verificationUriComplete?: string
+          expiresIn: number
+          interval: number
+        }>
+        deviceFlowPoll: (clientId: string, deviceCode: string) => Promise<{
+          status: 'authorized' | 'pending' | 'slow_down' | 'expired' | 'denied' | 'error'
+          accessToken?: string
+          tokenType?: string
+          scope?: string
+          error?: string
+          errorDescription?: string
+          errorUri?: string
+        }>
         getRepoInfo: (repoPath: string) => Promise<{ owner: string; repo: string } | null>
         getWorkflows: (repoPath: string, token?: string) => Promise<any[]>
         getWorkflowRuns: (

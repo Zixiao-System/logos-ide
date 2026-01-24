@@ -3,7 +3,7 @@
  * 提供与 GitHub Actions API 的交互
  */
 
-import { ipcMain } from 'electron'
+import { ipcMain, net } from 'electron'
 import { exec } from 'child_process'
 import { promisify } from 'util'
 
@@ -11,6 +11,17 @@ const execAsync = promisify(exec)
 
 /** GitHub API 基础 URL */
 const GITHUB_API_BASE = 'https://api.github.com'
+const GITHUB_OAUTH_BASE = 'https://github.com/login/oauth'
+const GITHUB_DEVICE_CODE_ENDPOINT = 'https://github.com/login/device/code'
+const GITHUB_ACCESS_TOKEN_ENDPOINT = `${GITHUB_OAUTH_BASE}/access_token`
+
+const GITHUB_REPO_ERROR = 'Cannot determine GitHub repository from remote URL'
+const GITHUB_TOKEN_ERROR = 'GitHub token not found. Please configure it in settings.'
+const GITHUB_OAUTH_CLIENT_ERROR = 'GitHub OAuth Client ID is required.'
+
+type GitHubRepoInfo = { owner: string; repo: string }
+
+const DEFAULT_GITHUB_OAUTH_SCOPES = ['repo', 'workflow']
 
 /** GitHub Workflow Run */
 interface GitHubWorkflowRun {
@@ -57,10 +68,46 @@ interface GitHubWorkflowJob {
   }>
 }
 
+interface GitHubDeviceCodeResponse {
+  device_code: string
+  user_code: string
+  verification_uri: string
+  verification_uri_complete?: string
+  expires_in: number
+  interval?: number
+}
+
+interface GitHubDeviceTokenResponse {
+  access_token?: string
+  token_type?: string
+  scope?: string
+  error?: string
+  error_description?: string
+  error_uri?: string
+}
+
+type GitHubDevicePollResult =
+  | {
+    status: 'authorized'
+    accessToken: string
+    tokenType: string
+    scope: string
+  }
+  | { status: 'pending' }
+  | { status: 'slow_down' }
+  | { status: 'expired' }
+  | { status: 'denied' }
+  | {
+    status: 'error'
+    error: string
+    errorDescription?: string
+    errorUri?: string
+  }
+
 /**
  * 从 git remote 获取仓库信息
  */
-async function getRepoInfo(repoPath: string): Promise<{ owner: string; repo: string } | null> {
+async function getRepoInfo(repoPath: string): Promise<GitHubRepoInfo | null> {
   try {
     const { stdout } = await execAsync('git remote get-url origin', { cwd: repoPath })
     const url = stdout.trim()
@@ -77,6 +124,33 @@ async function getRepoInfo(repoPath: string): Promise<{ owner: string; repo: str
   } catch {
     return null
   }
+}
+
+async function requireRepoInfo(repoPath: string): Promise<GitHubRepoInfo> {
+  const repoInfo = await getRepoInfo(repoPath)
+  if (!repoInfo) {
+    throw new Error(GITHUB_REPO_ERROR)
+  }
+  return repoInfo
+}
+
+async function requireToken(providedToken?: string, repoPath?: string): Promise<string> {
+  const resolvedToken = await getToken(providedToken, repoPath)
+  if (!resolvedToken) {
+    throw new Error(GITHUB_TOKEN_ERROR)
+  }
+  return resolvedToken
+}
+
+function getRepoBase(repoInfo: GitHubRepoInfo): string {
+  return `/repos/${repoInfo.owner}/${repoInfo.repo}`
+}
+
+function normalizeScopes(scopes?: string[]): string | undefined {
+  if (!scopes || scopes.length === 0) {
+    return DEFAULT_GITHUB_OAUTH_SCOPES.join(' ')
+  }
+  return scopes.join(' ')
 }
 
 /**
@@ -115,6 +189,25 @@ async function getToken(providedToken?: string, repoPath?: string): Promise<stri
   return null
 }
 
+interface GitHubClient {
+  repoBase: string
+  token: string
+  request: <T>(endpoint: string, method?: string, body?: unknown) => Promise<T>
+}
+
+async function createGitHubClient(repoPath: string, providedToken?: string): Promise<GitHubClient> {
+  const repoInfo = await requireRepoInfo(repoPath)
+  const token = await requireToken(providedToken, repoPath)
+  const repoBase = getRepoBase(repoInfo)
+
+  return {
+    repoBase,
+    token,
+    request: <T>(endpoint: string, method: string = 'GET', body?: unknown) =>
+      githubRequest<T>(endpoint, token, method, body)
+  }
+}
+
 /**
  * 发送 GitHub API 请求
  */
@@ -142,13 +235,137 @@ async function githubRequest<T>(
     throw new Error(`GitHub API error: ${response.status} - ${error}`)
   }
 
+  if (response.status === 204 || response.status === 205) {
+    return undefined as T
+  }
+
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    return (await response.text()) as unknown as T
+  }
+
   return response.json()
+}
+
+async function githubOAuthRequest<T>(
+  endpoint: string,
+  body: Record<string, string | undefined>
+): Promise<T> {
+  if (!endpoint) {
+    throw new Error('GitHub OAuth error: missing endpoint')
+  }
+
+  let url: URL
+  try {
+    url = new URL(endpoint)
+  } catch (error) {
+    throw new Error(`GitHub OAuth error: invalid endpoint ${String(endpoint)}`)
+  }
+
+  const payload = new URLSearchParams()
+  for (const [key, value] of Object.entries(body)) {
+    if (value) {
+      payload.set(key, value)
+    }
+  }
+
+  const payloadText = payload.toString()
+  const response = await net.fetch(url.toString(), {
+    method: 'POST',
+    headers: {
+      'Accept': 'application/json',
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'User-Agent': 'Logos-Electron'
+    },
+    body: payloadText
+  })
+
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`GitHub OAuth error: ${response.status} - ${error}`)
+  }
+
+  return response.json() as Promise<T>
+}
+
+function mapDeviceFlowResult(response: GitHubDeviceTokenResponse): GitHubDevicePollResult {
+  if (response.access_token) {
+    return {
+      status: 'authorized',
+      accessToken: response.access_token,
+      tokenType: response.token_type || 'bearer',
+      scope: response.scope || ''
+    }
+  }
+
+  switch (response.error) {
+    case 'authorization_pending':
+      return { status: 'pending' }
+    case 'slow_down':
+      return { status: 'slow_down' }
+    case 'expired_token':
+      return { status: 'expired' }
+    case 'access_denied':
+      return { status: 'denied' }
+    default:
+      return {
+        status: 'error',
+        error: response.error || 'unknown_error',
+        errorDescription: response.error_description,
+        errorUri: response.error_uri
+      }
+  }
 }
 
 /**
  * 注册 GitHub Actions IPC handlers
  */
 export function registerGitHubHandlers() {
+  // ============ OAuth Device Flow ============
+  ipcMain.handle('github:deviceFlowStart', async (_event, clientId: string, scopes?: string[]) => {
+    if (!clientId) {
+      throw new Error(GITHUB_OAUTH_CLIENT_ERROR)
+    }
+
+    const scope = normalizeScopes(scopes)
+    const response = await githubOAuthRequest<GitHubDeviceCodeResponse>(
+      GITHUB_DEVICE_CODE_ENDPOINT,
+      {
+        client_id: clientId,
+        scope
+      }
+    )
+
+    return {
+      deviceCode: response.device_code,
+      userCode: response.user_code,
+      verificationUri: response.verification_uri,
+      verificationUriComplete: response.verification_uri_complete,
+      expiresIn: response.expires_in,
+      interval: response.interval ?? 5
+    }
+  })
+
+  ipcMain.handle('github:deviceFlowPoll', async (_event, clientId: string, deviceCode: string) => {
+    if (!clientId) {
+      throw new Error(GITHUB_OAUTH_CLIENT_ERROR)
+    }
+    if (!deviceCode) {
+      throw new Error('GitHub device code is required.')
+    }
+
+    const response = await githubOAuthRequest<GitHubDeviceTokenResponse>(
+      GITHUB_ACCESS_TOKEN_ENDPOINT,
+      {
+        client_id: clientId,
+        device_code: deviceCode,
+        grant_type: 'urn:ietf:params:oauth:grant-type:device_code'
+      }
+    )
+
+    return mapDeviceFlowResult(response)
+  })
+
   // 获取仓库信息
   ipcMain.handle('github:getRepoInfo', async (_event, repoPath: string) => {
     return await getRepoInfo(repoPath)
@@ -160,19 +377,9 @@ export function registerGitHubHandlers() {
     repoPath: string,
     token?: string
   ) => {
-    const repoInfo = await getRepoInfo(repoPath)
-    if (!repoInfo) {
-      throw new Error('Cannot determine GitHub repository from remote URL')
-    }
-
-    const resolvedToken = await getToken(token, repoPath)
-    if (!resolvedToken) {
-      throw new Error('GitHub token not found. Please configure it in settings.')
-    }
-
-    const response = await githubRequest<{ workflows: GitHubWorkflow[] }>(
-      `/repos/${repoInfo.owner}/${repoInfo.repo}/actions/workflows`,
-      resolvedToken
+    const { repoBase, request } = await createGitHubClient(repoPath, token)
+    const response = await request<{ workflows: GitHubWorkflow[] }>(
+      `${repoBase}/actions/workflows`
     )
 
     return response.workflows
@@ -186,25 +393,14 @@ export function registerGitHubHandlers() {
     workflowId?: number,
     perPage: number = 20
   ) => {
-    const repoInfo = await getRepoInfo(repoPath)
-    if (!repoInfo) {
-      throw new Error('Cannot determine GitHub repository from remote URL')
-    }
+    const { repoBase, request } = await createGitHubClient(repoPath, token)
 
-    const resolvedToken = await getToken(token, repoPath)
-    if (!resolvedToken) {
-      throw new Error('GitHub token not found. Please configure it in settings.')
-    }
-
-    let endpoint = `/repos/${repoInfo.owner}/${repoInfo.repo}/actions/runs?per_page=${perPage}`
+    let endpoint = `${repoBase}/actions/runs?per_page=${perPage}`
     if (workflowId) {
-      endpoint = `/repos/${repoInfo.owner}/${repoInfo.repo}/actions/workflows/${workflowId}/runs?per_page=${perPage}`
+      endpoint = `${repoBase}/actions/workflows/${workflowId}/runs?per_page=${perPage}`
     }
 
-    const response = await githubRequest<{ workflow_runs: GitHubWorkflowRun[] }>(
-      endpoint,
-      resolvedToken
-    )
+    const response = await request<{ workflow_runs: GitHubWorkflowRun[] }>(endpoint)
 
     return response.workflow_runs
   })
@@ -216,19 +412,9 @@ export function registerGitHubHandlers() {
     runId: number,
     token?: string
   ) => {
-    const repoInfo = await getRepoInfo(repoPath)
-    if (!repoInfo) {
-      throw new Error('Cannot determine GitHub repository from remote URL')
-    }
-
-    const resolvedToken = await getToken(token, repoPath)
-    if (!resolvedToken) {
-      throw new Error('GitHub token not found. Please configure it in settings.')
-    }
-
-    const response = await githubRequest<{ jobs: GitHubWorkflowJob[] }>(
-      `/repos/${repoInfo.owner}/${repoInfo.repo}/actions/runs/${runId}/jobs`,
-      resolvedToken
+    const { repoBase, request } = await createGitHubClient(repoPath, token)
+    const response = await request<{ jobs: GitHubWorkflowJob[] }>(
+      `${repoBase}/actions/runs/${runId}/jobs`
     )
 
     return response.jobs
@@ -243,19 +429,10 @@ export function registerGitHubHandlers() {
     inputs?: Record<string, string>,
     token?: string
   ) => {
-    const repoInfo = await getRepoInfo(repoPath)
-    if (!repoInfo) {
-      throw new Error('Cannot determine GitHub repository from remote URL')
-    }
+    const { repoBase, request } = await createGitHubClient(repoPath, token)
 
-    const resolvedToken = await getToken(token, repoPath)
-    if (!resolvedToken) {
-      throw new Error('GitHub token not found. Please configure it in settings.')
-    }
-
-    await githubRequest(
-      `/repos/${repoInfo.owner}/${repoInfo.repo}/actions/workflows/${workflowId}/dispatches`,
-      resolvedToken,
+    await request<void>(
+      `${repoBase}/actions/workflows/${workflowId}/dispatches`,
       'POST',
       { ref, inputs }
     )
@@ -270,19 +447,10 @@ export function registerGitHubHandlers() {
     runId: number,
     token?: string
   ) => {
-    const repoInfo = await getRepoInfo(repoPath)
-    if (!repoInfo) {
-      throw new Error('Cannot determine GitHub repository from remote URL')
-    }
+    const { repoBase, request } = await createGitHubClient(repoPath, token)
 
-    const resolvedToken = await getToken(token, repoPath)
-    if (!resolvedToken) {
-      throw new Error('GitHub token not found. Please configure it in settings.')
-    }
-
-    await githubRequest(
-      `/repos/${repoInfo.owner}/${repoInfo.repo}/actions/runs/${runId}/cancel`,
-      resolvedToken,
+    await request<void>(
+      `${repoBase}/actions/runs/${runId}/cancel`,
       'POST'
     )
 
@@ -296,19 +464,10 @@ export function registerGitHubHandlers() {
     runId: number,
     token?: string
   ) => {
-    const repoInfo = await getRepoInfo(repoPath)
-    if (!repoInfo) {
-      throw new Error('Cannot determine GitHub repository from remote URL')
-    }
+    const { repoBase, request } = await createGitHubClient(repoPath, token)
 
-    const resolvedToken = await getToken(token, repoPath)
-    if (!resolvedToken) {
-      throw new Error('GitHub token not found. Please configure it in settings.')
-    }
-
-    await githubRequest(
-      `/repos/${repoInfo.owner}/${repoInfo.repo}/actions/runs/${runId}/rerun`,
-      resolvedToken,
+    await request<void>(
+      `${repoBase}/actions/runs/${runId}/rerun`,
       'POST'
     )
 
@@ -322,18 +481,10 @@ export function registerGitHubHandlers() {
     runId: number,
     token?: string
   ) => {
-    const repoInfo = await getRepoInfo(repoPath)
-    if (!repoInfo) {
-      throw new Error('Cannot determine GitHub repository from remote URL')
-    }
-
-    const resolvedToken = await getToken(token, repoPath)
-    if (!resolvedToken) {
-      throw new Error('GitHub token not found. Please configure it in settings.')
-    }
+    const { repoBase, token: resolvedToken } = await createGitHubClient(repoPath, token)
 
     // 获取日志下载 URL (会重定向)
-    const url = `${GITHUB_API_BASE}/repos/${repoInfo.owner}/${repoInfo.repo}/actions/runs/${runId}/logs`
+    const url = `${GITHUB_API_BASE}${repoBase}/actions/runs/${runId}/logs`
 
     return { url, token: resolvedToken }
   })
@@ -348,19 +499,9 @@ export function registerGitHubHandlers() {
     state: 'open' | 'closed' | 'all' = 'open',
     perPage: number = 30
   ) => {
-    const repoInfo = await getRepoInfo(repoPath)
-    if (!repoInfo) {
-      throw new Error('Cannot determine GitHub repository from remote URL')
-    }
-
-    const resolvedToken = await getToken(token, repoPath)
-    if (!resolvedToken) {
-      throw new Error('GitHub token not found. Please configure it in settings.')
-    }
-
-    const response = await githubRequest<any[]>(
-      `/repos/${repoInfo.owner}/${repoInfo.repo}/pulls?state=${state}&per_page=${perPage}`,
-      resolvedToken
+    const { repoBase, request } = await createGitHubClient(repoPath, token)
+    const response = await request<any[]>(
+      `${repoBase}/pulls?state=${state}&per_page=${perPage}`
     )
 
     return response
@@ -376,19 +517,9 @@ export function registerGitHubHandlers() {
     base: string,
     token?: string
   ) => {
-    const repoInfo = await getRepoInfo(repoPath)
-    if (!repoInfo) {
-      throw new Error('Cannot determine GitHub repository from remote URL')
-    }
-
-    const resolvedToken = await getToken(token, repoPath)
-    if (!resolvedToken) {
-      throw new Error('GitHub token not found. Please configure it in settings.')
-    }
-
-    const response = await githubRequest<any>(
-      `/repos/${repoInfo.owner}/${repoInfo.repo}/pulls`,
-      resolvedToken,
+    const { repoBase, request } = await createGitHubClient(repoPath, token)
+    const response = await request<any>(
+      `${repoBase}/pulls`,
       'POST',
       { title, body, head, base }
     )
@@ -406,19 +537,9 @@ export function registerGitHubHandlers() {
     state: 'open' | 'closed' | 'all' = 'open',
     perPage: number = 30
   ) => {
-    const repoInfo = await getRepoInfo(repoPath)
-    if (!repoInfo) {
-      throw new Error('Cannot determine GitHub repository from remote URL')
-    }
-
-    const resolvedToken = await getToken(token, repoPath)
-    if (!resolvedToken) {
-      throw new Error('GitHub token not found. Please configure it in settings.')
-    }
-
-    const response = await githubRequest<any[]>(
-      `/repos/${repoInfo.owner}/${repoInfo.repo}/issues?state=${state}&per_page=${perPage}`,
-      resolvedToken
+    const { repoBase, request } = await createGitHubClient(repoPath, token)
+    const response = await request<any[]>(
+      `${repoBase}/issues?state=${state}&per_page=${perPage}`
     )
 
     return response
@@ -433,19 +554,9 @@ export function registerGitHubHandlers() {
     labels?: string[],
     token?: string
   ) => {
-    const repoInfo = await getRepoInfo(repoPath)
-    if (!repoInfo) {
-      throw new Error('Cannot determine GitHub repository from remote URL')
-    }
-
-    const resolvedToken = await getToken(token, repoPath)
-    if (!resolvedToken) {
-      throw new Error('GitHub token not found. Please configure it in settings.')
-    }
-
-    const response = await githubRequest<any>(
-      `/repos/${repoInfo.owner}/${repoInfo.repo}/issues`,
-      resolvedToken,
+    const { repoBase, request } = await createGitHubClient(repoPath, token)
+    const response = await request<any>(
+      `${repoBase}/issues`,
       'POST',
       { title, body, ...(labels ? { labels } : {}) }
     )

@@ -4,7 +4,7 @@
  * 管理应用程序的各项设置
  */
 
-import { computed, ref } from 'vue'
+import { computed, ref, onBeforeUnmount } from 'vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useThemeStore } from '@/stores/theme'
 import type { CICDProvider } from '@/types/settings'
@@ -105,6 +105,11 @@ const githubToken = computed({
   set: (value: string) => settingsStore.setGitHubToken(value)
 })
 
+const githubOAuthClientId = computed({
+  get: () => settingsStore.devops.githubOAuthClientId,
+  set: (value: string) => settingsStore.setGitHubOAuthClientId(value)
+})
+
 const gitlabToken = computed({
   get: () => settingsStore.devops.gitlabToken,
   set: (value: string) => settingsStore.setGitLabToken(value)
@@ -124,6 +129,21 @@ const slackWebhookUrl = computed({
   get: () => settingsStore.devops.slackWebhookUrl,
   set: (value: string) => settingsStore.updateDevOps({ slackWebhookUrl: value })
 })
+
+type DeviceFlowInfo = {
+  deviceCode: string
+  userCode: string
+  verificationUri: string
+  verificationUriComplete?: string
+  expiresAt: number
+  interval: number
+}
+
+const deviceFlowInfo = ref<DeviceFlowInfo | null>(null)
+const deviceFlowStatus = ref<'idle' | 'pending' | 'authorized' | 'denied' | 'expired' | 'error'>('idle')
+const deviceFlowMessage = ref('')
+const deviceFlowBusy = ref(false)
+const deviceFlowTimer = ref<number | null>(null)
 
 // 遥测设置
 const telemetryEnabled = computed({
@@ -171,6 +191,160 @@ function resetColorScheme() {
   customColorInput.value = '#6750a4'
   selectedWallpaper.value = null
 }
+
+function clearDeviceFlowTimer() {
+  if (deviceFlowTimer.value !== null) {
+    window.clearTimeout(deviceFlowTimer.value)
+    deviceFlowTimer.value = null
+  }
+}
+
+function clearDeviceFlowInfo() {
+  clearDeviceFlowTimer()
+  deviceFlowInfo.value = null
+}
+
+function cancelDeviceFlow() {
+  clearDeviceFlowInfo()
+  deviceFlowStatus.value = 'idle'
+  deviceFlowMessage.value = ''
+}
+
+async function openDeviceFlowVerification() {
+  if (!deviceFlowInfo.value) return
+  const url = deviceFlowInfo.value.verificationUriComplete || deviceFlowInfo.value.verificationUri
+  await window.electronAPI?.openExternal(url)
+}
+
+async function copyDeviceFlowCode() {
+  if (!deviceFlowInfo.value?.userCode) return
+  try {
+    await navigator.clipboard.writeText(deviceFlowInfo.value.userCode)
+    deviceFlowMessage.value = '验证码已复制到剪贴板。'
+  } catch (error) {
+    deviceFlowMessage.value = '复制失败，请手动复制验证码。'
+  }
+}
+
+async function pollGitHubDeviceFlow() {
+  if (!deviceFlowInfo.value) return
+  if (!window.electronAPI?.github?.deviceFlowPoll) {
+    deviceFlowStatus.value = 'error'
+    deviceFlowMessage.value = '当前环境不支持 GitHub 设备登录。'
+    return
+  }
+
+  if (Date.now() > deviceFlowInfo.value.expiresAt) {
+    deviceFlowStatus.value = 'expired'
+    deviceFlowMessage.value = '设备码已过期，请重新开始。'
+    clearDeviceFlowInfo()
+    return
+  }
+
+  try {
+    const result = await window.electronAPI.github.deviceFlowPoll(
+      githubOAuthClientId.value,
+      deviceFlowInfo.value.deviceCode
+    )
+
+    switch (result.status) {
+      case 'authorized':
+        deviceFlowStatus.value = 'authorized'
+        deviceFlowMessage.value = 'GitHub 已授权，Token 已保存。'
+        if (result.accessToken) {
+          settingsStore.setGitHubToken(result.accessToken)
+        }
+        clearDeviceFlowInfo()
+        return
+      case 'pending':
+        deviceFlowStatus.value = 'pending'
+        break
+      case 'slow_down':
+        deviceFlowInfo.value.interval += 5
+        break
+      case 'expired':
+        deviceFlowStatus.value = 'expired'
+        deviceFlowMessage.value = '设备码已过期，请重新开始。'
+        clearDeviceFlowInfo()
+        return
+      case 'denied':
+        deviceFlowStatus.value = 'denied'
+        deviceFlowMessage.value = '授权被拒绝，请重新开始。'
+        clearDeviceFlowInfo()
+        return
+      case 'error':
+      default:
+        deviceFlowStatus.value = 'error'
+        deviceFlowMessage.value = result.errorDescription || '设备登录失败，请稍后重试。'
+        clearDeviceFlowInfo()
+        return
+    }
+  } catch (error) {
+    deviceFlowStatus.value = 'error'
+    deviceFlowMessage.value = '设备登录失败，请稍后重试。'
+    clearDeviceFlowInfo()
+    return
+  }
+
+  clearDeviceFlowTimer()
+  deviceFlowTimer.value = window.setTimeout(
+    pollGitHubDeviceFlow,
+    Math.max(5, deviceFlowInfo.value.interval) * 1000
+  )
+}
+
+async function startGitHubDeviceFlow() {
+  if (!window.electronAPI?.github?.deviceFlowStart) {
+    deviceFlowStatus.value = 'error'
+    deviceFlowMessage.value = '当前环境不支持 GitHub 设备登录。'
+    return
+  }
+  if (!githubOAuthClientId.value) {
+    deviceFlowStatus.value = 'error'
+    deviceFlowMessage.value = '请先填写 GitHub OAuth Client ID。'
+    return
+  }
+
+  clearDeviceFlowInfo()
+  deviceFlowBusy.value = true
+  deviceFlowMessage.value = '正在获取设备码...'
+
+  try {
+    const response = await window.electronAPI.github.deviceFlowStart(
+      githubOAuthClientId.value.trim(),
+      ['repo', 'workflow']
+    )
+
+    deviceFlowInfo.value = {
+      deviceCode: response.deviceCode,
+      userCode: response.userCode,
+      verificationUri: response.verificationUri,
+      verificationUriComplete: response.verificationUriComplete,
+      expiresAt: Date.now() + response.expiresIn * 1000,
+      interval: response.interval
+    }
+
+    deviceFlowStatus.value = 'pending'
+    await openDeviceFlowVerification()
+
+    clearDeviceFlowTimer()
+    deviceFlowTimer.value = window.setTimeout(
+      pollGitHubDeviceFlow,
+      Math.max(5, response.interval) * 1000
+    )
+  } catch (error) {
+    deviceFlowStatus.value = 'error'
+    deviceFlowMessage.value = error instanceof Error
+      ? error.message
+      : '获取设备码失败，请稍后重试。'
+  } finally {
+    deviceFlowBusy.value = false
+  }
+}
+
+onBeforeUnmount(() => {
+  clearDeviceFlowTimer()
+})
 </script>
 
 <template>
@@ -368,6 +542,67 @@ function resetColorScheme() {
 
       <!-- GitHub 配置 -->
       <template v-if="cicdProvider === 'github'">
+        <mdui-divider></mdui-divider>
+        <div class="setting-item">
+          <div class="setting-info">
+            <span class="setting-label">GitHub OAuth Client ID</span>
+            <span class="setting-description">设备登录所需的 OAuth Client ID</span>
+          </div>
+          <mdui-text-field
+            :value="githubOAuthClientId"
+            variant="outlined"
+            placeholder="Iv1.xxxxxxxxxxxxxxxx"
+            @input="(e: any) => githubOAuthClientId = e.target.value"
+          ></mdui-text-field>
+        </div>
+
+        <mdui-divider></mdui-divider>
+        <div class="setting-item-vertical">
+          <div class="setting-info">
+            <span class="setting-label">GitHub 设备登录</span>
+            <span class="setting-description">通过 Device Flow 授权并自动保存 Token</span>
+          </div>
+          <div class="device-flow-actions">
+            <mdui-button
+              variant="outlined"
+              :loading="deviceFlowBusy"
+              :disabled="deviceFlowBusy || !githubOAuthClientId"
+              @click="startGitHubDeviceFlow"
+            >
+              开始设备登录
+            </mdui-button>
+            <mdui-button
+              variant="text"
+              :disabled="deviceFlowBusy || !deviceFlowInfo"
+              @click="cancelDeviceFlow"
+            >
+              取消
+            </mdui-button>
+          </div>
+          <div v-if="deviceFlowInfo" class="device-flow-panel">
+            <div class="device-flow-row">
+              <span class="device-flow-label">验证码</span>
+              <code class="device-flow-code">{{ deviceFlowInfo.userCode }}</code>
+              <mdui-button variant="text" @click="copyDeviceFlowCode">
+                复制
+              </mdui-button>
+            </div>
+            <div class="device-flow-row">
+              <span class="device-flow-label">验证地址</span>
+              <span class="device-flow-url">{{ deviceFlowInfo.verificationUri }}</span>
+              <mdui-button variant="text" @click="openDeviceFlowVerification">
+                打开
+              </mdui-button>
+            </div>
+            <div class="device-flow-hint">
+              在浏览器输入验证码完成授权，完成后会自动填充 Token。
+            </div>
+          </div>
+          <div v-if="deviceFlowMessage" class="device-flow-message" :data-status="deviceFlowStatus">
+            {{ deviceFlowMessage }}
+          </div>
+        </div>
+
         <mdui-divider></mdui-divider>
         <div class="setting-item">
           <div class="setting-info">
@@ -697,6 +932,59 @@ mdui-select {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.device-flow-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.device-flow-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: var(--mdui-color-surface-container);
+}
+
+.device-flow-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.device-flow-label {
+  min-width: 72px;
+  font-weight: 500;
+  color: var(--mdui-color-on-surface-variant);
+}
+
+.device-flow-code {
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--mdui-color-surface-variant);
+  color: var(--mdui-color-on-surface);
+  letter-spacing: 0.12em;
+  font-weight: 600;
+}
+
+.device-flow-url {
+  color: var(--mdui-color-primary);
+  font-size: 0.9rem;
+  word-break: break-all;
+}
+
+.device-flow-hint {
+  font-size: 0.875rem;
+  color: var(--mdui-color-on-surface-variant);
+}
+
+.device-flow-message {
+  font-size: 0.875rem;
+  color: var(--mdui-color-on-surface-variant);
 }
 
 .color-preview {
