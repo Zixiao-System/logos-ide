@@ -2,6 +2,8 @@ type WindowMessageLevel = 'info' | 'warning' | 'error'
 
 type CommandHandler = (...args: unknown[]) => unknown
 
+type EventListener<T> = (event: T) => unknown
+
 class Disposable {
   private onDispose?: () => void
 
@@ -14,6 +16,39 @@ class Disposable {
       this.onDispose()
       this.onDispose = undefined
     }
+  }
+
+  static from(...disposables: Array<{ dispose: () => void }>): Disposable {
+    return new Disposable(() => {
+      for (const disposable of disposables) {
+        disposable.dispose()
+      }
+    })
+  }
+}
+
+class EventEmitter<T> {
+  private listeners = new Set<EventListener<T>>()
+
+  event = (listener: EventListener<T>): Disposable => {
+    this.listeners.add(listener)
+    return new Disposable(() => {
+      this.listeners.delete(listener)
+    })
+  }
+
+  fire(data: T): void {
+    for (const listener of Array.from(this.listeners)) {
+      try {
+        listener(data)
+      } catch (error) {
+        console.error('[extension-host] event listener error', error)
+      }
+    }
+  }
+
+  dispose(): void {
+    this.listeners.clear()
   }
 }
 
@@ -143,7 +178,8 @@ const vscodeApi = {
   commands,
   window: windowApi,
   workspace: workspaceApi,
-  Disposable
+  Disposable,
+  EventEmitter
 }
 
 let moduleRegistered = false
