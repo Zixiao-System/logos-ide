@@ -87,6 +87,8 @@ temp/
 *.tmp
 release/
 
+/.logos/
+
 /dist-electron/
 /resources/
 /dist-scripts/
