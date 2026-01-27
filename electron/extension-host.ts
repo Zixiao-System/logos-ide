@@ -1,85 +1,93 @@
-import {
-  registerVscodeModule,
-  openTextDocumentFromHost,
-  updateTextDocumentFromHost,
-  closeTextDocumentFromHost,
-  setActiveTextEditorFromHost,
-  updateActiveEditorSelectionFromHost,
-  provideCompletions,
-  provideInlineCompletions,
-  provideHover,
-  provideDefinition,
-  provideReferences,
-  provideImplementation,
-  provideTypeDefinition,
-  provideDeclaration,
-  provideDocumentSymbols,
-  provideSignatureHelp,
-  provideRenameEdits,
-  prepareRename,
-  provideCodeActions,
-  provideFormattingEdits,
-  provideRangeFormattingEdits,
-  provideOnTypeFormattingEdits,
-  resolveWebviewView,
-  postWebviewMessage,
-  disposeWebviewView,
-  handleUiResponse,
-  vscodeApi
-} from './extension-host/vscode'
-import { ExtensionHost } from './extension-host/loader'
+/**
+ * Extension Host Process Stub
+ *
+ * This is the entry point for the VS Code Extension Host child process.
+ * It receives IPC messages from the main process and delegates to the ExtensionHost.
+ *
+ * This is a Phase 1 stub implementation.
+ *
+ * TODO (Phase 1):
+ * - Complete ExtensionHost implementation
+ * - Implement message handlers for all RPC types
+ * - Add error handling and logging
+ * - Add graceful shutdown logic
+ *
+ * Message Flow:
+ *   Main Process -> Fork -> extension-host.ts -> ExtensionHost
+ *        ^                                           |
+ *        |___________ IPC messages (bi-directional) |
+ */
 
+import { RpcProtocol, RpcMethods } from './extension-host/rpc-protocol'
+
+/**
+ * Type definitions for host messages from main process
+ */
 type HostMessage =
   | { type: 'ping' }
   | { type: 'shutdown' }
   | { type: 'setWorkspaceRoot'; root?: string | null }
   | { type: 'reloadExtensions' }
-  | { type: 'documentOpen'; document: { uri: string; languageId: string; content: string; version: number } }
-  | { type: 'documentChange'; document: { uri: string; languageId: string; content: string; version: number } }
-  | { type: 'documentClose'; uri: string }
-  | { type: 'activeEditorChange'; uri: string | null; selection?: { start: { line: number; character: number }; end: { line: number; character: number } } }
-  | { type: 'selectionChange'; uri: string; selection: { start: { line: number; character: number }; end: { line: number; character: number } } }
-  | { type: 'provideCompletions'; requestId: string; payload: { uri: string; position: { line: number; character: number }; context?: { triggerKind?: number; triggerCharacter?: string } } }
-  | { type: 'provideInlineCompletions'; requestId: string; payload: { uri: string; position: { line: number; character: number } } }
-  | { type: 'provideHover'; requestId: string; payload: { uri: string; position: { line: number; character: number } } }
-  | { type: 'provideDefinition'; requestId: string; payload: { uri: string; position: { line: number; character: number } } }
-  | { type: 'provideReferences'; requestId: string; payload: { uri: string; position: { line: number; character: number }; context?: { includeDeclaration?: boolean } } }
-  | { type: 'provideImplementation'; requestId: string; payload: { uri: string; position: { line: number; character: number } } }
-  | { type: 'provideTypeDefinition'; requestId: string; payload: { uri: string; position: { line: number; character: number } } }
-  | { type: 'provideDeclaration'; requestId: string; payload: { uri: string; position: { line: number; character: number } } }
-  | { type: 'provideDocumentSymbols'; requestId: string; payload: { uri: string } }
-  | { type: 'provideSignatureHelp'; requestId: string; payload: { uri: string; position: { line: number; character: number }; context?: { triggerKind?: number; triggerCharacter?: string; isRetrigger?: boolean } } }
-  | { type: 'provideRenameEdits'; requestId: string; payload: { uri: string; position: { line: number; character: number }; newName: string } }
-  | { type: 'prepareRename'; requestId: string; payload: { uri: string; position: { line: number; character: number } } }
-  | { type: 'provideCodeActions'; requestId: string; payload: { uri: string; range: { start: { line: number; character: number }; end: { line: number; character: number } }; context?: { only?: string; triggerKind?: number } } }
-  | { type: 'provideFormattingEdits'; requestId: string; payload: { uri: string; options?: { tabSize: number; insertSpaces: boolean } } }
-  | { type: 'provideRangeFormattingEdits'; requestId: string; payload: { uri: string; range: { start: { line: number; character: number }; end: { line: number; character: number } }; options?: { tabSize: number; insertSpaces: boolean } } }
-  | { type: 'provideOnTypeFormattingEdits'; requestId: string; payload: { uri: string; position: { line: number; character: number }; ch: string; options?: { tabSize: number; insertSpaces: boolean } } }
-  | { type: 'executeCommand'; requestId: string; payload: { command: string; args?: unknown[] } }
-  | { type: 'uiResponse'; requestId: string; ok: boolean; result?: unknown; error?: string }
-  | { type: 'resolveWebviewView'; requestId: string; payload: { viewId: string } }
-  | { type: 'webviewPostMessage'; requestId: string; payload: { handle: string; message: unknown } }
-  | { type: 'webviewDispose'; requestId: string; payload: { handle: string } }
 
+/**
+ * Type definitions for host events sent to main process
+ */
 type HostEvent =
   | { type: 'ready'; pid: number }
   | { type: 'pong'; pid: number }
   | { type: 'rpcResponse'; requestId: string; ok: boolean; payload?: unknown; error?: string }
 
-registerVscodeModule()
-
-const extensionsRoot = process.env.LOGOS_EXTENSIONS_DIR || ''
-const host = new ExtensionHost(extensionsRoot)
-host.start().catch((error) => {
-  console.error('[extension-host] startup failed:', error)
-})
-
+/**
+ * Send event to main process
+ */
 function sendEvent(event: HostEvent): void {
   if (process.send) {
     process.send(event)
   }
 }
 
+/**
+ * Log function for extension host process
+ */
+function log(message: string, ...args: any[]): void {
+  console.log(`[extension-host] ${message}`, ...args)
+}
+
+function logError(message: string, ...args: any[]): void {
+  console.error(`[extension-host] ERROR: ${message}`, ...args)
+}
+
+// ============================================================================
+// Phase 1 Stub Implementation
+// ============================================================================
+
+// TODO (Phase 1): Initialize vscode module shim
+// import { vscodeModule } from './extension-host/vscode-api-stub'
+
+// TODO (Phase 1): Initialize ExtensionHost
+// const extensionsRoot = process.env.LOGOS_EXTENSIONS_DIR || ''
+// const host = new ExtensionHost(extensionsRoot)
+
+// TODO (Phase 1): Start loading extensions
+// host.start().catch((error) => {
+//   logError('startup failed:', error)
+//   process.exit(1)
+// })
+
+log('Extension Host process started (pid: %d)', process.pid)
+log('LOGOS_WORKSPACE_ROOT:', process.env.LOGOS_WORKSPACE_ROOT)
+log('LOGOS_EXTENSIONS_DIR:', process.env.LOGOS_EXTENSIONS_DIR)
+
+// Send ready signal to main process
+sendEvent({ type: 'ready', pid: process.pid })
+
+// ============================================================================
+// Message Handler
+// ============================================================================
+
+/**
+ * Handle messages from main process
+ */
 process.on('message', (message: unknown) => {
   if (!message || typeof message !== 'object') {
     return
@@ -89,150 +97,38 @@ process.on('message', (message: unknown) => {
 
   switch (typedMessage.type) {
     case 'ping':
+      log('Received ping from main process')
       sendEvent({ type: 'pong', pid: process.pid })
       break
+
     case 'shutdown':
-      host.shutdown().finally(() => {
-        process.exit(0)
-      })
+      log('Received shutdown signal, exiting...')
+      // TODO (Phase 1): Graceful shutdown logic
+      // host.shutdown().then(() => {
+      //   log('Shutdown complete')
+      //   process.exit(0)
+      // }).catch((error) => {
+      //   logError('Shutdown error:', error)
+      //   process.exit(1)
+      // })
+      process.exit(0)
       break
+
     case 'setWorkspaceRoot':
-      host.setWorkspaceRoot(typedMessage.root ?? null)
+      log('Workspace root changed:', typedMessage.root)
+      // TODO (Phase 1): Update workspace root in ExtensionHost
+      // host.setWorkspaceRoot(typedMessage.root ?? null)
       break
     case 'reloadExtensions':
-      host.reload().catch((error) => {
-        console.error('[extension-host] reload failed:', error)
-      })
+      log('Received extension reload request')
+      // TODO (Phase 1): Reload extensions
       break
-    case 'documentOpen': {
-      const document = openTextDocumentFromHost(typedMessage.document)
-      host.handleDocumentOpened(document.languageId)
-      break
-    }
-    case 'documentChange':
-      {
-        const document = updateTextDocumentFromHost(typedMessage.document)
-        if (document) {
-          host.handleDocumentOpened(document.languageId)
-        }
-      }
-      break
-    case 'documentClose':
-      closeTextDocumentFromHost({ uri: typedMessage.uri })
-      break
-    case 'activeEditorChange':
-      setActiveTextEditorFromHost({ uri: typedMessage.uri, selection: typedMessage.selection })
-      break
-    case 'selectionChange':
-      updateActiveEditorSelectionFromHost({ uri: typedMessage.uri, selection: typedMessage.selection })
-      break
-    case 'provideCompletions':
-      provideCompletions(typedMessage.payload)
-        .then((result) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: true, payload: result }))
-        .catch((error) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: false, error: error?.message || 'Completion failed' }))
-      break
-    case 'provideInlineCompletions':
-      provideInlineCompletions(typedMessage.payload)
-        .then((result) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: true, payload: result }))
-        .catch((error) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: false, error: error?.message || 'Inline completion failed' }))
-      break
-    case 'provideHover':
-      provideHover(typedMessage.payload)
-        .then((result) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: true, payload: result }))
-        .catch((error) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: false, error: error?.message || 'Hover failed' }))
-      break
-    case 'provideDefinition':
-      provideDefinition(typedMessage.payload)
-        .then((result) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: true, payload: result }))
-        .catch((error) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: false, error: error?.message || 'Definition failed' }))
-      break
-    case 'provideReferences':
-      provideReferences(typedMessage.payload)
-        .then((result) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: true, payload: result }))
-        .catch((error) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: false, error: error?.message || 'References failed' }))
-      break
-    case 'provideImplementation':
-      provideImplementation(typedMessage.payload)
-        .then((result) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: true, payload: result }))
-        .catch((error) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: false, error: error?.message || 'Implementation failed' }))
-      break
-    case 'provideTypeDefinition':
-      provideTypeDefinition(typedMessage.payload)
-        .then((result) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: true, payload: result }))
-        .catch((error) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: false, error: error?.message || 'Type definition failed' }))
-      break
-    case 'provideDeclaration':
-      provideDeclaration(typedMessage.payload)
-        .then((result) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: true, payload: result }))
-        .catch((error) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: false, error: error?.message || 'Declaration failed' }))
-      break
-    case 'provideDocumentSymbols':
-      provideDocumentSymbols(typedMessage.payload)
-        .then((result) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: true, payload: result }))
-        .catch((error) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: false, error: error?.message || 'Document symbols failed' }))
-      break
-    case 'provideSignatureHelp':
-      provideSignatureHelp(typedMessage.payload)
-        .then((result) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: true, payload: result }))
-        .catch((error) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: false, error: error?.message || 'Signature help failed' }))
-      break
-    case 'provideRenameEdits':
-      provideRenameEdits(typedMessage.payload)
-        .then((result) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: true, payload: result }))
-        .catch((error) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: false, error: error?.message || 'Rename failed' }))
-      break
-    case 'prepareRename':
-      prepareRename(typedMessage.payload)
-        .then((result) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: true, payload: result }))
-        .catch((error) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: false, error: error?.message || 'Prepare rename failed' }))
-      break
-    case 'provideCodeActions':
-      provideCodeActions(typedMessage.payload)
-        .then((result) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: true, payload: result }))
-        .catch((error) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: false, error: error?.message || 'Code actions failed' }))
-      break
-    case 'provideFormattingEdits':
-      provideFormattingEdits(typedMessage.payload)
-        .then((result) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: true, payload: result }))
-        .catch((error) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: false, error: error?.message || 'Formatting failed' }))
-      break
-    case 'provideRangeFormattingEdits':
-      provideRangeFormattingEdits(typedMessage.payload)
-        .then((result) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: true, payload: result }))
-        .catch((error) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: false, error: error?.message || 'Range formatting failed' }))
-      break
-    case 'provideOnTypeFormattingEdits':
-      provideOnTypeFormattingEdits(typedMessage.payload)
-        .then((result) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: true, payload: result }))
-        .catch((error) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: false, error: error?.message || 'On-type formatting failed' }))
-      break
-    case 'resolveWebviewView':
-      host.handleViewActivated(typedMessage.payload.viewId)
-        .then(() => resolveWebviewView(typedMessage.payload))
-        .then((result) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: true, payload: result }))
-        .catch((error) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: false, error: error?.message || 'Resolve webview view failed' }))
-      break
-    case 'webviewPostMessage':
-      postWebviewMessage(typedMessage.payload)
-        .then(() => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: true }))
-        .catch((error) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: false, error: error?.message || 'Webview message failed' }))
-      break
-    case 'webviewDispose':
-      disposeWebviewView(typedMessage.payload)
-        .then(() => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: true }))
-        .catch((error) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: false, error: error?.message || 'Webview dispose failed' }))
-      break
-    case 'executeCommand':
-      vscodeApi.commands.executeCommand(typedMessage.payload.command, ...(typedMessage.payload.args ?? []))
-        .then((result) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: true, payload: result }))
-        .catch((error) => sendEvent({ type: 'rpcResponse', requestId: typedMessage.requestId, ok: false, error: error?.message || 'Command failed' }))
-      break
-    case 'uiResponse':
-      handleUiResponse(typedMessage)
-      break
+
     default:
+      log('Received unknown message type:', (typedMessage as any).type)
       break
   }
 })
 
-sendEvent({ type: 'ready', pid: process.pid })
+// Log completion
+log('Extension Host IPC listener registered')
