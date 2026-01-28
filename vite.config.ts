@@ -40,7 +40,7 @@ export default defineConfig({
     },
     {
       entry: 'electron/preload.ts',
-      onstart(options) {
+      onstart: (options) => {
         options.reload()
       },
       vite: {
@@ -51,10 +51,7 @@ export default defineConfig({
       }
     }
   ]), renderer(), sentryVitePlugin({
-    org: "zixiao-technologies",
-    project: "logos"
-  }), sentryVitePlugin({
-    org: "zixiao-technologies",
+    org: "zixiao-labs",
     project: "logos"
   })],
   resolve: {
