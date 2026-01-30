@@ -4,27 +4,24 @@
  * 在遥测同意后显示，帮助用户配置代码智能功能
  */
 
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useIntelligenceStore } from '@/stores/intelligence'
 
 // 导入图标
 import '@mdui/icons/code.js'
 import '@mdui/icons/check-circle.js'
-import '@mdui/icons/speed.js'
 import '@mdui/icons/memory.js'
 
 const settingsStore = useSettingsStore()
 const intelligenceStore = useIntelligenceStore()
 
 const showDialog = computed(() => settingsStore.shouldShowLSPSetup)
-const selectedMode = ref<'basic' | 'smart'>('basic')
-
 const handleConfirm = async () => {
   // 保存设置
-  settingsStore.setLSPMode(selectedMode.value)
+  settingsStore.setLSPMode('smart')
   // 立即应用模式（同步到 intelligence store）
-  await intelligenceStore.setMode(selectedMode.value)
+  await intelligenceStore.setMode('smart')
   settingsStore.dismissLSPSetup()
 }
 
@@ -47,48 +44,25 @@ const handleSkip = () => {
 
       <div class="setup-body">
         <p class="setup-intro">
-          选择代码智能模式以获得更好的开发体验。
+          已默认启用 Smart 模式以获得更完整的开发体验。
         </p>
 
         <div class="mode-options">
-          <div
-            class="mode-card"
-            :class="{ selected: selectedMode === 'basic' }"
-            @click="selectedMode = 'basic'"
-          >
-            <div class="mode-header">
-              <mdui-icon-speed></mdui-icon-speed>
-              <span class="mode-title">Basic 模式</span>
-              <mdui-icon-check-circle v-if="selectedMode === 'basic'" class="check-icon"></mdui-icon-check-circle>
-            </div>
-            <p class="mode-desc">使用标准 LSP 协议，快速启动，资源占用低</p>
-            <ul class="mode-features">
-              <li>代码补全</li>
-              <li>跳转定义</li>
-              <li>查找引用</li>
-              <li>悬停提示</li>
-            </ul>
-            <p class="mode-note">需要安装对应语言的 LSP 服务器</p>
-          </div>
-
-          <div
-            class="mode-card"
-            :class="{ selected: selectedMode === 'smart' }"
-            @click="selectedMode = 'smart'"
-          >
+          <div class="mode-card selected">
             <div class="mode-header">
               <mdui-icon-memory></mdui-icon-memory>
               <span class="mode-title">Smart 模式</span>
-              <mdui-icon-check-circle v-if="selectedMode === 'smart'" class="check-icon"></mdui-icon-check-circle>
+              <mdui-icon-check-circle class="check-icon"></mdui-icon-check-circle>
             </div>
-            <p class="mode-desc">全量索引，类似 JetBrains 的智能体验</p>
+            <p class="mode-desc">全量索引 + LSP 协作，获得更完整的智能体验</p>
             <ul class="mode-features">
               <li>安全重构</li>
               <li>调用层级</li>
               <li>影响分析</li>
               <li>跨项目搜索</li>
+              <li>LSP 诊断补充</li>
             </ul>
-            <p class="mode-note">需要更多内存，首次启动较慢</p>
+            <p class="mode-note">首次启动需要更多内存与索引时间</p>
           </div>
         </div>
 

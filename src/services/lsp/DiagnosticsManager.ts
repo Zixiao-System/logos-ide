@@ -26,6 +26,7 @@ export class DiagnosticsManager {
 
     this.markers.set(model.uri.toString(), markers)
     monaco.editor.setModelMarkers(model, 'intelligence', markers)
+    monaco.editor.setModelMarkers(model, 'lsp', [])
   }
 
   /**

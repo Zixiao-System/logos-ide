@@ -53,7 +53,7 @@ export interface TelemetrySettings {
 export interface LSPSettings {
   /** 是否已显示过 LSP Setup 提示 */
   hasShownSetup: boolean
-  /** 智能模式: basic (标准 LSP) 或 smart (全量索引) */
+  /** 智能模式: smart (全量索引 + LSP 协作) */
   mode: 'basic' | 'smart'
 }
 
@@ -99,7 +99,7 @@ export const DEFAULT_TELEMETRY_SETTINGS: TelemetrySettings = {
 /** 默认 LSP 设置 */
 export const DEFAULT_LSP_SETTINGS: LSPSettings = {
   hasShownSetup: false,
-  mode: 'basic'
+  mode: 'smart'
 }
 
 /** 默认应用设置 */

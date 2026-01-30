@@ -1,6 +1,6 @@
 /**
  * 智能模式状态管理
- * 负责管理 Basic/Smart 模式切换、索引进度、服务器状态
+ * 负责管理 Smart 模式索引进度、服务器状态
  * 支持 .logos 项目级智能模式设置（.logos/settings.json）
  */
 
@@ -100,9 +100,9 @@ const DEFAULT_THRESHOLD: SmartModeThreshold = {
 
 export const useIntelligenceStore = defineStore('intelligence', {
   state: (): IntelligenceState => ({
-    mode: 'basic',
+    mode: 'smart',
     autoSelect: true,
-    indexingProgress: null,
+    indexingProgress: { ...DEFAULT_INDEXING_PROGRESS },
     serverStatus: {},
     isSwitching: false,
     projectAnalysis: null,
@@ -119,8 +119,8 @@ export const useIntelligenceStore = defineStore('intelligence', {
     /** 是否为 Smart Mode */
     isSmartMode: (state): boolean => state.mode === 'smart',
 
-    /** 是否为 Basic Mode */
-    isBasicMode: (state): boolean => state.mode === 'basic',
+  /** 是否为 Basic Mode */
+  isBasicMode: (state): boolean => state.mode === 'basic',
 
     /** 是否正在索引 */
     isIndexing: (state): boolean => {
@@ -130,7 +130,6 @@ export const useIntelligenceStore = defineStore('intelligence', {
 
     /** 索引是否就绪 */
     isReady: (state): boolean => {
-      if (state.mode === 'basic') return true
       return state.indexingProgress?.phase === 'ready'
     },
 
@@ -145,15 +144,12 @@ export const useIntelligenceStore = defineStore('intelligence', {
       if (this.isIndexing && this.indexingProgress) {
         return `Indexing ${this.indexingProgress.percentage}%`
       }
-      return this.isSmartMode ? 'Smart' : 'Basic'
+      return 'Smart'
     },
 
     /** 获取模式完整描述 */
     modeDescription(): string {
-      if (this.isSmartMode) {
-        return 'Smart Mode - Full indexing, advanced refactoring'
-      }
-      return 'Basic Mode - Standard LSP, fast & lightweight'
+      return 'Smart Mode - Full indexing with LSP collaboration'
     },
 
     /** 获取所有活跃的服务器 */
@@ -203,7 +199,8 @@ export const useIntelligenceStore = defineStore('intelligence', {
      * @param opts.skipLocalStorage - 为 true 时不写入 localStorage（如加载 .logos 项目设置时）
      */
     async setMode(mode: IntelligenceMode, opts?: { skipLocalStorage?: boolean }) {
-      if (this.mode === mode) return
+      const targetMode: IntelligenceMode = mode === 'basic' ? 'smart' : mode
+      if (this.mode === targetMode) return
       if (this.isSwitching) return
 
       this.isSwitching = true
@@ -211,14 +208,14 @@ export const useIntelligenceStore = defineStore('intelligence', {
       try {
         // 通知主进程切换模式
         if (window.electronAPI?.intelligence?.setMode) {
-          await window.electronAPI.intelligence.setMode(mode)
+          await window.electronAPI.intelligence.setMode(targetMode)
         }
 
         // 切换 IntelligenceManager 的模式 (注册/注销 Monaco providers)
         const manager = getIntelligenceManager()
-        await manager.setMode(mode)
+        await manager.setMode(targetMode)
 
-        this.mode = mode
+        this.mode = targetMode
 
         // 保存设置到 localStorage（全局持久化），加载项目设置时跳过
         if (!opts?.skipLocalStorage && typeof window !== 'undefined' && window.localStorage) {
@@ -228,7 +225,7 @@ export const useIntelligenceStore = defineStore('intelligence', {
             if (savedSettings) {
               const settings = JSON.parse(savedSettings)
               if (!settings.lsp) settings.lsp = {}
-              settings.lsp.mode = mode
+              settings.lsp.mode = targetMode
               localStorage.setItem(settingsKey, JSON.stringify(settings))
             }
           } catch (error) {
@@ -237,7 +234,7 @@ export const useIntelligenceStore = defineStore('intelligence', {
         }
 
         // Smart Mode 开始时重置索引进度
-        if (mode === 'smart') {
+        if (targetMode === 'smart') {
           this.indexingProgress = { ...DEFAULT_INDEXING_PROGRESS }
         } else {
           this.indexingProgress = null
@@ -298,10 +295,10 @@ export const useIntelligenceStore = defineStore('intelligence', {
     },
 
     /**
-     * 切换模式 (Basic <-> Smart)
+     * 触发 Smart 模式
      */
     async toggleMode() {
-      await this.setMode(this.mode === 'basic' ? 'smart' : 'basic')
+      await this.setMode('smart')
     },
 
     /**
@@ -354,19 +351,7 @@ export const useIntelligenceStore = defineStore('intelligence', {
       const analysis = await this.analyzeProject()
       this.projectAnalysis = analysis
 
-      if (
-        analysis.fileCount > this.smartModeThreshold.maxFiles ||
-        analysis.estimatedMemory > this.smartModeThreshold.maxMemoryMB
-      ) {
-        // 大型项目默认使用 Basic
-        await this.setMode('basic')
-      } else if (analysis.hasComplexDependencies) {
-        // 复杂依赖关系的项目使用 Smart
-        await this.setMode('smart')
-      } else {
-        // 默认使用 Basic (快速启动)
-        await this.setMode('basic')
-      }
+      await this.setMode('smart')
     },
 
     /**
@@ -405,8 +390,8 @@ export const useIntelligenceStore = defineStore('intelligence', {
      * 重置状态
      */
     reset() {
-      this.mode = 'basic'
-      this.indexingProgress = null
+      this.mode = 'smart'
+      this.indexingProgress = { ...DEFAULT_INDEXING_PROGRESS }
       this.serverStatus = {}
       this.isSwitching = false
       this.projectAnalysis = null
@@ -420,10 +405,9 @@ export const useIntelligenceStore = defineStore('intelligence', {
      * 在应用启动时调用，从 settings store 同步模式
      */
     async initFromSettings(mode: IntelligenceMode) {
-      this.mode = mode
-      if (mode === 'smart') {
-        this.indexingProgress = { ...DEFAULT_INDEXING_PROGRESS }
-      }
+      const targetMode: IntelligenceMode = mode === 'basic' ? 'smart' : mode
+      this.mode = targetMode
+      this.indexingProgress = { ...DEFAULT_INDEXING_PROGRESS }
 
       // 启动内存监控
       if (this.memoryMonitorEnabled) {
@@ -505,29 +489,20 @@ export const useIntelligenceStore = defineStore('intelligence', {
     },
 
     /**
-     * 自动降级到 Basic 模式
+     * 内存压力提示（不再切换模式）
      */
     async handleAutoDowngrade() {
-      if (this.mode !== 'smart') return
       if (this.isSwitching) return
+      console.warn('[Intelligence] High memory pressure detected, Smart Mode recommended to stay on')
 
-      console.warn('[Intelligence] High memory pressure detected, switching to Basic mode')
-
-      try {
-        await this.setMode('basic')
-
-        // 发送通知事件给 UI
-        const event = new CustomEvent('intelligence:auto-downgrade', {
-          detail: {
-            reason: 'high-memory-pressure',
-            pressure: this.memoryPressure,
-            usage: this.memoryUsage,
-          },
-        })
-        window.dispatchEvent(event)
-      } catch (error) {
-        console.error('Failed to auto-downgrade:', error)
-      }
+      const event = new CustomEvent('intelligence:auto-downgrade', {
+        detail: {
+          reason: 'high-memory-pressure',
+          pressure: this.memoryPressure,
+          usage: this.memoryUsage,
+        },
+      })
+      window.dispatchEvent(event)
     },
 
     /**

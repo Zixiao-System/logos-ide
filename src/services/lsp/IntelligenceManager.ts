@@ -2,9 +2,8 @@
  * 代码智能管理器
  * 负责管理 Monaco Editor 的代码智能功能
  *
- * 支持两种模式:
- * - Basic Mode: 使用标准 LSP 服务器 (typescript-language-server, pyright 等)
- * - Smart Mode: 使用自定义 IPC + Rust Daemon 提供高级功能
+ * 智能模式:
+ * - Smart Mode: 使用自定义 IPC + Rust Daemon，并与 LSP 协作提供补充诊断
  */
 
 import * as monaco from 'monaco-editor'
@@ -16,29 +15,14 @@ import { SignatureHelpProvider } from './providers/SignatureHelpProvider'
 import { RenameProvider } from './providers/RenameProvider'
 import { InlayHintsProvider } from './providers/InlayHintsProvider'
 import { RefactorCodeActionProvider } from './providers/RefactorCodeActionProvider'
-import { registerLSPProviders } from './providers/LSPProviders'
 import { DiagnosticsManager } from './DiagnosticsManager'
-import { getLSPClientService, destroyLSPClientService } from './LSPClientService'
+import { getLSPClientService } from './LSPClientService'
 import { daemonService } from '@/services/language/DaemonLanguageService'
 import { isDaemonLanguage, isNativeLanguage } from '@/services/language/utils'
 import type { LanguageServerStatus } from '@/types/intelligence'
 
 /** 智能模式 */
 export type IntelligenceMode = 'basic' | 'smart'
-
-/** 支持的语言 */
-const ALL_LANGUAGES = [
-  'typescript',
-  'javascript',
-  'typescriptreact',
-  'javascriptreact',
-  'python',
-  'go',
-  'rust',
-  'c',
-  'cpp',
-  'java',
-]
 
 /** Tier 1 语言 (TypeScript/JavaScript) - Smart 模式使用 IPC */
 const TIER1_LANGUAGES = [
@@ -94,10 +78,11 @@ export class IntelligenceManager {
   private daemonInitialized = false
 
   /** 当前模式 */
-  private currentMode: IntelligenceMode = 'basic'
+  private currentMode: IntelligenceMode = 'smart'
 
   /** 模式变更回调 */
   private modeChangeCallbacks: Array<(mode: IntelligenceMode) => void> = []
+  private lspDiagnosticsCleanup: (() => void) | null = null
 
   constructor() {
     this.diagnosticsManager = new DiagnosticsManager()
@@ -317,25 +302,22 @@ export class IntelligenceManager {
    * 设置模式
    */
   async setMode(mode: IntelligenceMode): Promise<void> {
-    if (mode === this.currentMode) return
+    const targetMode: IntelligenceMode = mode === 'basic' ? 'smart' : mode
+    if (targetMode === this.currentMode) return
 
-    console.log(`[IntelligenceManager] Switching mode: ${this.currentMode} -> ${mode}`)
+    console.log(`[IntelligenceManager] Switching mode: ${this.currentMode} -> ${targetMode}`)
 
     // 清理当前模式的资源
     await this.cleanup()
 
     // 设置新模式
-    this.currentMode = mode
+    this.currentMode = targetMode
 
-    // 初始化新模式
-    if (mode === 'basic') {
-      await this.initializeBasicMode()
-    } else {
-      await this.initializeSmartMode()
-    }
+    // 初始化新模式 (Smart Mode only)
+    await this.initializeSmartMode()
 
     // 通知模式变更
-    this.modeChangeCallbacks.forEach(cb => cb(mode))
+    this.modeChangeCallbacks.forEach(cb => cb(targetMode))
   }
 
   /**
@@ -352,42 +334,10 @@ export class IntelligenceManager {
   }
 
   /**
-   * 初始化代码智能服务 (默认使用 Basic 模式)
+   * 初始化代码智能服务 (默认使用 Smart 模式)
    */
   async initialize(): Promise<void> {
-    if (this.currentMode === 'basic') {
-      await this.initializeBasicMode()
-    } else {
-      await this.initializeSmartMode()
-    }
-  }
-
-  /**
-   * 初始化 Basic 模式 (标准 LSP)
-   */
-  private async initializeBasicMode(): Promise<void> {
-    console.log('[IntelligenceManager] Initializing Basic Mode (Standard LSP)')
-
-    // 为所有语言注册 LSP Provider
-    for (const languageId of ALL_LANGUAGES) {
-      const providers = registerLSPProviders(languageId)
-      this.disposables.push(...providers)
-    }
-
-    // 设置 LSP 诊断监听
-    const lspClient = getLSPClientService()
-    const cleanup = lspClient.onDiagnostics((uri, diagnostics) => {
-      // 查找对应的 model
-      const models = monaco.editor.getModels()
-      const model = models.find(m => m.uri.fsPath === uri.replace('file://', ''))
-      if (model) {
-        const converted = lspClient.convertDiagnostics(diagnostics)
-        monaco.editor.setModelMarkers(model, 'lsp', converted)
-      }
-    })
-    this.disposables.push({ dispose: cleanup })
-
-    console.log('[IntelligenceManager] Basic Mode initialized')
+    await this.initializeSmartMode()
   }
 
   /**
@@ -406,12 +356,38 @@ export class IntelligenceManager {
       this.handleServerStatusChange.bind(this)
     )
 
+    // 启用 LSP 协作诊断
+    this.initializeLspCollaboration()
+
     // 初始化 Daemon 服务
     this.initializeDaemon().catch(error => {
       console.warn('[IntelligenceManager] Daemon initialization skipped:', error?.message || error)
     })
 
     console.log('[IntelligenceManager] Smart Mode initialized')
+  }
+
+  /**
+   * Smart Mode 下启用 LSP 协作诊断（仅在 Smart 未提供诊断时作为补充）
+   */
+  private initializeLspCollaboration(): void {
+    const lspClient = getLSPClientService()
+    if (this.lspDiagnosticsCleanup) {
+      this.lspDiagnosticsCleanup()
+    }
+    this.lspDiagnosticsCleanup = lspClient.onDiagnostics((uri, diagnostics) => {
+      const models = monaco.editor.getModels()
+      const filePath = uri.replace('file://', '')
+      const model = models.find(m => m.uri.fsPath === filePath)
+      if (!model) return
+
+      const smartMarkers = monaco.editor.getModelMarkers({ resource: model.uri, owner: 'intelligence' })
+      if (smartMarkers.length > 0) {
+        return
+      }
+      const converted = lspClient.convertDiagnostics(diagnostics)
+      monaco.editor.setModelMarkers(model, 'lsp', converted)
+    })
   }
 
   /**
@@ -439,13 +415,10 @@ export class IntelligenceManager {
   async openProject(rootPath: string): Promise<void> {
     this.projectRoot = rootPath
 
-    if (this.currentMode === 'basic') {
-      // Basic 模式: 设置 LSP 项目根目录
-      await window.electronAPI.lsp.setProjectRoot(rootPath)
-    } else {
-      // Smart 模式: 使用现有的 intelligence IPC
-      await window.electronAPI.intelligence.openProject(rootPath)
-    }
+    // Smart 模式: 使用现有的 intelligence IPC
+    await window.electronAPI.intelligence.openProject(rootPath)
+    // LSP 协作：设置项目根目录
+    await window.electronAPI.lsp.setProjectRoot(rootPath)
   }
 
   /**
@@ -541,23 +514,21 @@ export class IntelligenceManager {
   syncFile(filePath: string, content: string): void {
     if (!this.isSupported(filePath)) return
 
-    if (this.currentMode === 'basic') {
-      // Basic 模式: 使用 LSP 客户端
-      const lspClient = getLSPClientService()
-      lspClient.updateDocument(filePath, content)
-    } else {
-      // Smart 模式: 使用原有逻辑
-      if (this.isDaemonLanguage(filePath)) {
-        if (this.daemonInitialized) {
-          daemonService.updateDocument(filePath, content)
-        }
-      } else if (this.isNativeLanguage(filePath)) {
-        const currentVersion = this.fileVersions.get(filePath) || 0
-        const newVersion = currentVersion + 1
-        this.fileVersions.set(filePath, newVersion)
-        window.electronAPI.intelligence.syncFile(filePath, content, newVersion)
+    // Smart 模式: 使用原有逻辑
+    if (this.isDaemonLanguage(filePath)) {
+      if (this.daemonInitialized) {
+        daemonService.updateDocument(filePath, content)
       }
+    } else if (this.isNativeLanguage(filePath)) {
+      const currentVersion = this.fileVersions.get(filePath) || 0
+      const newVersion = currentVersion + 1
+      this.fileVersions.set(filePath, newVersion)
+      window.electronAPI.intelligence.syncFile(filePath, content, newVersion)
     }
+
+    // LSP 协作：同步内容用于诊断补充
+    const lspClient = getLSPClientService()
+    void lspClient.updateDocument(filePath, content)
   }
 
   /**
@@ -566,20 +537,18 @@ export class IntelligenceManager {
   openFile(filePath: string, content: string): void {
     if (!this.isSupported(filePath)) return
 
-    if (this.currentMode === 'basic') {
-      // Basic 模式: 使用 LSP 客户端
+    // Smart 模式: 使用 Daemon
+    if (this.isDaemonLanguage(filePath) && this.daemonInitialized) {
       const ext = filePath.substring(filePath.lastIndexOf('.'))
       const languageId = EXT_TO_LANGUAGE[ext] || 'plaintext'
-      const lspClient = getLSPClientService()
-      lspClient.openDocument(filePath, content, languageId)
-    } else {
-      // Smart 模式: 使用 Daemon
-      if (this.isDaemonLanguage(filePath) && this.daemonInitialized) {
-        const ext = filePath.substring(filePath.lastIndexOf('.'))
-        const languageId = EXT_TO_LANGUAGE[ext] || 'plaintext'
-        daemonService.openDocument(filePath, content, languageId)
-      }
+      daemonService.openDocument(filePath, content, languageId)
     }
+
+    // LSP 协作：打开文档以获取诊断
+    const ext = filePath.substring(filePath.lastIndexOf('.'))
+    const languageId = EXT_TO_LANGUAGE[ext] || 'plaintext'
+    const lspClient = getLSPClientService()
+    void lspClient.openDocument(filePath, content, languageId)
   }
 
   /**
@@ -588,20 +557,18 @@ export class IntelligenceManager {
   closeFile(filePath: string): void {
     this.fileVersions.delete(filePath)
 
-    if (this.currentMode === 'basic') {
-      // Basic 模式: 使用 LSP 客户端
-      const lspClient = getLSPClientService()
-      lspClient.closeDocument(filePath)
-    } else {
-      // Smart 模式
-      if (this.isDaemonLanguage(filePath)) {
-        if (this.daemonInitialized) {
-          daemonService.closeDocument(filePath)
-        }
-      } else {
-        window.electronAPI.intelligence.closeFile(filePath)
+    // Smart 模式
+    if (this.isDaemonLanguage(filePath)) {
+      if (this.daemonInitialized) {
+        daemonService.closeDocument(filePath)
       }
+    } else {
+      window.electronAPI.intelligence.closeFile(filePath)
     }
+
+    // LSP 协作
+    const lspClient = getLSPClientService()
+    void lspClient.closeDocument(filePath)
   }
 
   /**
@@ -703,14 +670,13 @@ export class IntelligenceManager {
       this.statusListenerCleanup = null
     }
 
-    // 根据模式清理
-    if (this.currentMode === 'basic') {
-      destroyLSPClientService()
-    } else {
-      if (this.daemonInitialized) {
-        daemonService.dispose()
-        this.daemonInitialized = false
-      }
+    if (this.lspDiagnosticsCleanup) {
+      this.lspDiagnosticsCleanup()
+      this.lspDiagnosticsCleanup = null
+    }
+    if (this.daemonInitialized) {
+      daemonService.dispose()
+      this.daemonInitialized = false
     }
   }
 

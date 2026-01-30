@@ -4,8 +4,7 @@
     <div class="mode-trigger" @click="toggleMenu">
       <!-- 模式图标 -->
       <mdui-icon-sync v-if="intelligenceStore.isIndexing" class="spinning"></mdui-icon-sync>
-      <mdui-icon-flash-on v-else-if="intelligenceStore.isSmartMode"></mdui-icon-flash-on>
-      <mdui-icon-flash-off v-else></mdui-icon-flash-off>
+      <mdui-icon-flash-on v-else></mdui-icon-flash-on>
 
       <!-- 模式标签 -->
       <span class="mode-label">{{ modeLabel }}</span>
@@ -22,7 +21,7 @@
       </div>
     </div>
 
-    <!-- 模式切换菜单 -->
+    <!-- 模式信息菜单 -->
     <Teleport to="body">
       <Transition name="menu-fade">
         <div
@@ -31,45 +30,21 @@
           :style="menuStyle"
           @click.stop
         >
-          <!-- Basic Mode 选项 -->
-          <div
-            class="menu-item"
-            :class="{ selected: intelligenceStore.isBasicMode }"
-            @click="selectMode('basic')"
-          >
-            <div class="menu-item-header">
-              <mdui-icon-flash-off></mdui-icon-flash-off>
-              <span class="menu-item-title">Basic Mode</span>
-              <mdui-icon-check v-if="intelligenceStore.isBasicMode" class="check-icon"></mdui-icon-check>
-            </div>
-            <div class="menu-item-description">
-              Standard LSP - Fast startup, low memory
-            </div>
-            <div class="menu-item-features">
-              <span class="feature-tag">Completions</span>
-              <span class="feature-tag">Definitions</span>
-              <span class="feature-tag">References</span>
-            </div>
-          </div>
-
-          <!-- Smart Mode 选项 -->
-          <div
-            class="menu-item"
-            :class="{ selected: intelligenceStore.isSmartMode }"
-            @click="selectMode('smart')"
-          >
+          <!-- Smart Mode 说明 -->
+          <div class="menu-item selected">
             <div class="menu-item-header">
               <mdui-icon-flash-on></mdui-icon-flash-on>
               <span class="menu-item-title">Smart Mode</span>
-              <mdui-icon-check v-if="intelligenceStore.isSmartMode" class="check-icon"></mdui-icon-check>
+              <mdui-icon-check class="check-icon"></mdui-icon-check>
             </div>
             <div class="menu-item-description">
-              Full indexing - Advanced refactoring & analysis
+              Full indexing + LSP collaboration
             </div>
             <div class="menu-item-features">
               <span class="feature-tag">Safe Rename</span>
               <span class="feature-tag">Call Hierarchy</span>
               <span class="feature-tag">Impact Analysis</span>
+              <span class="feature-tag">LSP Diagnostics</span>
             </div>
           </div>
 
@@ -126,12 +101,11 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useIntelligenceStore, type IntelligenceMode } from '@/stores/intelligence'
+import { useIntelligenceStore } from '@/stores/intelligence'
 import { useFileExplorerStore } from '@/stores/fileExplorer'
 
 // 导入需要的图标
 import '@mdui/icons/flash-on.js'
-import '@mdui/icons/flash-off.js'
 import '@mdui/icons/check.js'
 import '@mdui/icons/check-box.js'
 import '@mdui/icons/check-box-outline-blank.js'
@@ -150,7 +124,7 @@ const modeLabel = computed(() => {
   if (intelligenceStore.isIndexing && intelligenceStore.indexingProgress) {
     return `Indexing ${intelligenceStore.indexingProgress.percentage}%`
   }
-  return intelligenceStore.isSmartMode ? 'Smart' : 'Basic'
+  return 'Smart'
 })
 
 /** 索引阶段标签 */
@@ -181,16 +155,6 @@ const toggleMenu = () => {
 }
 
 /** 选择模式 */
-const selectMode = async (mode: IntelligenceMode) => {
-  showMenu.value = false
-  if (intelligenceStore.mode !== mode) {
-    await intelligenceStore.setMode(mode)
-    if (fileExplorerStore.rootPath) {
-      await intelligenceStore.persistToProject(fileExplorerStore.rootPath)
-    }
-  }
-}
-
 /** 切换自动选择 */
 const toggleAutoSelect = async () => {
   await intelligenceStore.setAutoSelect(!intelligenceStore.autoSelect)
@@ -216,15 +180,15 @@ const getRecommendation = () => {
   if (!analysis) return ''
 
   if (analysis.fileCount > intelligenceStore.smartModeThreshold.maxFiles) {
-    return `Large project (${analysis.fileCount} files) - Basic Mode recommended`
+    return `Large project (${analysis.fileCount} files) - Smart Mode stays on`
   }
   if (analysis.estimatedMemory > intelligenceStore.smartModeThreshold.maxMemoryMB) {
-    return `High memory usage (${analysis.estimatedMemory}MB) - Basic Mode recommended`
+    return `High memory usage (${analysis.estimatedMemory}MB) - Smart Mode stays on`
   }
   if (analysis.hasComplexDependencies) {
     return 'Complex dependencies detected - Smart Mode recommended'
   }
-  return 'Small project - Basic Mode for fast startup'
+  return 'Smart Mode is active'
 }
 
 /** 点击外部关闭菜单 */

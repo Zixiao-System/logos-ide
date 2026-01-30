@@ -597,6 +597,23 @@ watch(() => editorStore.activeTabId, (newId) => {
   }
 })
 
+// 处理外部导航请求
+watch(() => editorStore.pendingNavigation, (target) => {
+  if (!target || !editor || !activeTab.value) return
+  if (activeTab.value.path !== target.path) return
+
+  editor.setPosition({
+    lineNumber: target.line,
+    column: target.column
+  })
+  editor.revealPositionInCenter({
+    lineNumber: target.line,
+    column: target.column
+  })
+  editor.focus()
+  editorStore.clearPendingNavigation()
+})
+
 // 监听标签页关闭
 watch(() => editorStore.tabs.length, (newLen, oldLen) => {
   if (newLen < oldLen) {

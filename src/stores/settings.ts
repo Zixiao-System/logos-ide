@@ -103,6 +103,9 @@ export const useSettingsStore = defineStore('settings', {
           }
           if (parsed.lsp) {
             this.lsp = { ...DEFAULT_LSP_SETTINGS, ...parsed.lsp }
+            if (this.lsp.mode === 'basic') {
+              this.lsp.mode = 'smart'
+            }
           }
         }
       } catch (error) {
@@ -244,7 +247,7 @@ export const useSettingsStore = defineStore('settings', {
      * 设置 LSP 模式
      */
     setLSPMode(mode: 'basic' | 'smart') {
-      this.lsp.mode = mode
+      this.lsp.mode = mode === 'basic' ? 'smart' : mode
       this.save()
     },
 
