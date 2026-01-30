@@ -1,10 +1,18 @@
 import { sentryVitePlugin } from "@sentry/vite-plugin";
-import { defineConfig } from 'vite'
+import { defineConfig, type PluginOption } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import electron from 'vite-plugin-electron'
 import renderer from 'vite-plugin-electron-renderer'
 import monacoEditor from 'vite-plugin-monaco-editor'
 import { resolve } from 'path'
+
+const isCI = Boolean(process.env.CI) || process.env.GITHUB_ACTIONS === 'true'
+const sentryPlugin = isCI
+  ? sentryVitePlugin({
+      org: "zixiao-labs",
+      project: "logos"
+    })
+  : null
 
 export default defineConfig({
   plugins: [vue({
@@ -50,10 +58,7 @@ export default defineConfig({
         }
       }
     }
-  ]), renderer(), sentryVitePlugin({
-    org: "zixiao-labs",
-    project: "logos"
-  })],
+  ]), renderer(), sentryPlugin].filter(Boolean) as PluginOption[],
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src')

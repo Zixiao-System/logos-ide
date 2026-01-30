@@ -1,5 +1,5 @@
 import { autoUpdater, UpdateInfo, ProgressInfo } from 'electron-updater'
-import { ipcMain, BrowserWindow } from 'electron'
+import { ipcMain, BrowserWindow, app } from 'electron'
 
 // 更新状态
 export type UpdateStatus =
@@ -34,7 +34,7 @@ export function initAutoUpdater(getMainWindow: () => BrowserWindow | null) {
   mainWindow = getMainWindow()
 
   // 配置
-  autoUpdater.autoDownload = false // 手动控制下载
+  autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true
 
   // 事件处理
@@ -70,6 +70,13 @@ export function initAutoUpdater(getMainWindow: () => BrowserWindow | null) {
     console.log('[Updater] Update downloaded:', info.version)
     sendStatusToWindow({ status: 'downloaded', info })
   })
+
+  if (app.isPackaged) {
+    autoUpdater.checkForUpdatesAndNotify().catch((error: Error) => {
+      console.error('[Updater] Auto check failed:', error.message)
+      sendStatusToWindow({ status: 'error', error: error.message })
+    })
+  }
 }
 
 // 注册 IPC 处理程序
