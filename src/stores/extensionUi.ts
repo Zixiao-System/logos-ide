@@ -12,6 +12,9 @@ const webviewMessageListeners = new Map<string, Set<(message: unknown) => void>>
 let unsubscribeWebviewMessage: (() => void) | null = null
 let unsubscribeWebviewHtml: (() => void) | null = null
 const resolvingViews = new Set<string>()
+const resolveRetries = new Map<string, number>()
+const MAX_RESOLVE_RETRIES = 6
+const RESOLVE_RETRY_DELAY_MS = 300
 
 function toExtensionUrl(rawPath?: string): string | undefined {
   if (!rawPath) {
@@ -45,8 +48,10 @@ export const useExtensionUiStore = defineStore('extensionUi', {
   actions: {
     async init() {
       if (!window.electronAPI?.extensions?.listUiContributions) {
+        console.warn('[extensions:init] listUiContributions missing')
         return
       }
+      console.info('[extensions:init] start')
 
       if (!unsubscribeWebviewMessage && window.electronAPI.extensions.onWebviewMessage) {
         unsubscribeWebviewMessage = window.electronAPI.extensions.onWebviewMessage((payload: ExtensionWebviewMessage) => {
@@ -66,15 +71,25 @@ export const useExtensionUiStore = defineStore('extensionUi', {
           if (!viewId) {
             return
           }
+          console.info('[extensions:webviewHtml]', {
+            viewId,
+            handle: payload.handle,
+            htmlLength: payload.html?.length ?? 0
+          })
           this.viewHtml = { ...this.viewHtml, [viewId]: payload.html }
         })
       }
 
       await this.refresh()
+      console.info('[extensions:init] done', {
+        containers: this.containers.length,
+        views: this.views.length
+      })
     },
 
     async refresh() {
       if (!window.electronAPI?.extensions?.listUiContributions) {
+        console.warn('[extensions:refresh] listUiContributions missing')
         return
       }
 
@@ -83,6 +98,10 @@ export const useExtensionUiStore = defineStore('extensionUi', {
 
       try {
         const result = await window.electronAPI.extensions.listUiContributions() as ExtensionUiContributions
+        console.info('[extensions:refresh] ui contributions', {
+          containers: result.containers?.length ?? 0,
+          views: result.views?.length ?? 0
+        })
         this.containers = result.containers || []
         this.views = result.views || []
 
@@ -93,6 +112,11 @@ export const useExtensionUiStore = defineStore('extensionUi', {
             delete this.viewHandles[viewId]
             delete this.viewOptions[viewId]
           }
+        }
+
+        // Pre-resolve views to avoid missing activation signals in Electron 40.
+        for (const view of this.views) {
+          void this.resolveView(view.id)
         }
       } catch (error) {
         this.error = (error as Error).message
@@ -138,8 +162,23 @@ export const useExtensionUiStore = defineStore('extensionUi', {
       try {
         const result = await window.electronAPI.extensions.resolveWebviewView({ viewId }) as ExtensionWebviewResolveResult | null
         if (!result) {
+          const attempt = (resolveRetries.get(viewId) ?? 0) + 1
+          if (attempt <= MAX_RESOLVE_RETRIES) {
+            resolveRetries.set(viewId, attempt)
+            setTimeout(() => {
+              resolvingViews.delete(viewId)
+              void this.resolveView(viewId)
+            }, RESOLVE_RETRY_DELAY_MS)
+          }
           return
         }
+        console.info('[extensions:resolveWebviewView]', {
+          viewId,
+          handle: result.handle,
+          enableScripts: result.options?.enableScripts ?? false,
+          htmlLength: result.html?.length ?? 0
+        })
+        resolveRetries.delete(viewId)
         this.viewHandles = { ...this.viewHandles, [viewId]: result.handle }
         this.handleToView = { ...this.handleToView, [result.handle]: viewId }
         this.viewOptions = { ...this.viewOptions, [viewId]: result.options ?? {} }

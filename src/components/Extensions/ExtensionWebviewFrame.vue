@@ -244,6 +244,15 @@ const injectCsp = (html: string, nonce: string, extraContent?: string) => {
   return injectHeadContent(html, combined)
 }
 
+const extractNonce = (html: string) => {
+  const match = html.match(/nonce=["']([^"']+)["']/i)
+  return match?.[1] ?? null
+}
+
+const hasCspMeta = (html: string) => {
+  return /<meta[^>]+http-equiv=["']Content-Security-Policy["'][^>]*>/i.test(html)
+}
+
 const buildThemeBootstrap = (payload: { kind: string; name: string; variables: Record<string, string> }, nonce: string) => {
   return `
     <script nonce="${nonce}">
@@ -291,7 +300,8 @@ const srcdoc = computed(() => {
   if (!props.enableScripts || !props.handle) {
     return props.html
   }
-  const nonce = createNonce()
+  const existingNonce = extractNonce(props.html)
+  const nonce = existingNonce ?? createNonce()
   const themeBootstrap = buildThemeBootstrap(themePayload.value, nonce)
   const bridge = `
     <script nonce="${nonce}">
@@ -311,11 +321,13 @@ const srcdoc = computed(() => {
       })();
     <${'/'}script>
   `
-  const withCsp = injectCsp(props.html, nonce, themeBootstrap)
-  if (withCsp.includes('</body>')) {
-    return withCsp.replace('</body>', `${bridge}</body>`)
+  const withHead = hasCspMeta(props.html)
+    ? injectHeadContent(props.html, themeBootstrap)
+    : injectCsp(props.html, nonce, themeBootstrap)
+  if (withHead.includes('</body>')) {
+    return withHead.replace('</body>', `${bridge}</body>`)
   }
-  return `${withCsp}${bridge}`
+  return `${withHead}${bridge}`
 })
 
 const forwardMessage = (message: unknown) => {

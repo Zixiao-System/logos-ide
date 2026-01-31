@@ -16,6 +16,7 @@ export interface LocalExtensionInfo {
   description?: string
   path: string
   enabled: boolean
+  trusted?: boolean
   iconPath?: string
   categories?: string[]
 }

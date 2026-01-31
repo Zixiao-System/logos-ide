@@ -7,7 +7,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useExtensionsStore } from '@/stores/extensions'
 import { useExtensionUiStore } from '@/stores/extensionUi'
 import { useNotificationStore } from '@/stores/notification'
-import type { ExtensionMarketplaceItem } from '@/types'
+import type { ExtensionMarketplaceItem, LocalExtensionInfo } from '@/types'
 
 // 导入 MDUI 图标
 import '@mdui/icons/refresh.js'
@@ -90,8 +90,11 @@ const handleOpenRoot = async () => {
   await extensionsStore.openExtensionsRoot()
 }
 
-const handleToggle = async (id: string, enabled: boolean) => {
-  await extensionsStore.setEnabled(id, enabled)
+const isExtensionTrusted = (extension: LocalExtensionInfo) => extension.trusted !== false
+const isExtensionEnabled = (extension: LocalExtensionInfo) => extension.enabled && isExtensionTrusted(extension)
+
+const handleToggle = async (extension: LocalExtensionInfo, enabled: boolean) => {
+  await extensionsStore.setEnabled(extension.id, enabled)
   await extensionUiStore.refresh()
 }
 
@@ -168,6 +171,11 @@ const installFromOpenVsx = async (extension: OpenVsxExtension) => {
     const installed = await window.electronAPI.extensions.installFromUrl(downloadUrl)
     notificationStore.success(`已安装扩展: ${installed.displayName || installed.name}`)
     await extensionsStore.refresh()
+    const target = extensionsStore.extensions.find(item => item.id === installed.id) ?? installed
+    if (target.trusted === false) {
+      await extensionsStore.ensureTrusted(target)
+      await extensionsStore.refresh()
+    }
     await extensionUiStore.refresh()
   } catch (error) {
     notificationStore.error((error as Error).message || '安装失败')
@@ -221,6 +229,11 @@ const installFromMarketplace = async (extension: ExtensionMarketplaceItem) => {
     const installed = await window.electronAPI.extensions.installFromUrl(extension.downloadUrl)
     notificationStore.success(`已安装扩展: ${installed.displayName || installed.name}`)
     await extensionsStore.refresh()
+    const target = extensionsStore.extensions.find(item => item.id === installed.id) ?? installed
+    if (target.trusted === false) {
+      await extensionsStore.ensureTrusted(target)
+      await extensionsStore.refresh()
+    }
     await extensionUiStore.refresh()
   } catch (error) {
     notificationStore.error((error as Error).message || '安装失败')
@@ -292,6 +305,7 @@ onMounted(() => {
           <div class="extension-meta">
             <span class="extension-id">{{ extension.id }}</span>
             <span class="extension-version">v{{ extension.version || '0.0.0' }}</span>
+            <span v-if="extension.trusted === false" class="extension-permission">需要授权</span>
           </div>
           <div class="extension-desc">
             {{ extension.description || '暂无描述' }}
@@ -299,8 +313,8 @@ onMounted(() => {
         </div>
         <div class="extension-actions">
           <mdui-switch
-            :checked="extension.enabled"
-            @change="handleToggle(extension.id, !extension.enabled)"
+            :checked="isExtensionEnabled(extension)"
+            @change="handleToggle(extension, !isExtensionEnabled(extension))"
           ></mdui-switch>
           <mdui-button-icon class="danger" title="卸载" @click="handleUninstall(extension.id)">
             <mdui-icon-delete></mdui-icon-delete>
@@ -544,6 +558,15 @@ onMounted(() => {
   gap: 8px;
   font-size: 11px;
   color: var(--mdui-color-on-surface-variant);
+}
+
+.extension-permission {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--mdui-color-error);
+  font-size: 10px;
+  font-weight: 600;
 }
 
 .extension-id {

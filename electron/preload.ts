@@ -110,6 +110,7 @@ interface LocalExtensionInfo {
   description?: string
   path: string
   enabled: boolean
+  trusted?: boolean
   iconPath?: string
   categories?: string[]
 }
@@ -763,6 +764,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('extensions:uninstall', extensionId),
     setEnabled: (extensionId: string, enabled: boolean): Promise<boolean> =>
       ipcRenderer.invoke('extensions:setEnabled', extensionId, enabled),
+    setTrusted: (extensionId: string, trusted: boolean): Promise<boolean> =>
+      ipcRenderer.invoke('extensions:setTrusted', extensionId, trusted),
     setWorkspaceRoot: (rootPath: string | null): Promise<boolean> =>
       ipcRenderer.invoke('extensions:setWorkspaceRoot', rootPath),
     notifyDocumentOpen: (payload: ExtensionDocumentPayload): Promise<boolean> =>
@@ -2398,6 +2401,7 @@ declare global {
         installFromUrl: (url: string) => Promise<LocalExtensionInfo>
         uninstall: (extensionId: string) => Promise<boolean>
         setEnabled: (extensionId: string, enabled: boolean) => Promise<boolean>
+        setTrusted: (extensionId: string, trusted: boolean) => Promise<boolean>
         setWorkspaceRoot: (rootPath: string | null) => Promise<boolean>
         notifyDocumentOpen: (payload: ExtensionDocumentPayload) => Promise<boolean>
         notifyDocumentChange: (payload: ExtensionDocumentChangePayload) => Promise<boolean>
