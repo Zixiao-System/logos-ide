@@ -14,6 +14,7 @@
 [![TypeScript](https://img.shields.io/badge/typescript-5.4+-3178C6.svg)](https://typescriptlang.org)
 [![Check & Build](https://github.com/zixiao-labs/logos/actions/workflows/Check.yml/badge.svg)](https://github.com/zixiao-labs/logos/actions/workflows/Check.yml)
 [![Release & Publish](https://github.com/zixiao-labs/logos/actions/workflows/Release.yml/badge.svg)](https://github.com/zixiao-labs/logos/actions/workflows/Release.yml)
+[![Update VS Code Vendor](https://github.com/zixiao-labs/logos/actions/workflows/UpdateVscodeVendor.yml/badge.svg)](https://github.com/zixiao-labs/logos/actions/workflows/UpdateVscodeVendor.yml)
 
 [Download](#download) | [Features](#features) | [Development](#development) | [Documentation](#documentation)
 
