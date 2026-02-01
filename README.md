@@ -77,16 +77,16 @@ Logos is a modern, lightweight code editor built with Electron and Vue 3. It fea
 
 | Platform | Architecture | Download |
 |----------|--------------|----------|
-| macOS | Universal (Intel + Apple Silicon) | [Download](https://github.com/Zixiao-System/logos/releases/download/v2026.5.4/Logos-2026.5.4-arm64.dmg) |
-| Windows | x64 | [Download](https://github.com/Zixiao-System/logos/releases/download/v2026.5.4/Logos-2026.5.4-arm64.dmg) |
-| Linux | x64 | [Download](https://github.com/Zixiao-System/logos/releases/download/v2026.5.4/Logos-2026.5.4-arm64.dmg) |
-| Linux | arm64 | [Download](https://github.com/Zixiao-System/logos/releases/download/v2026.5.4/Logos-2026.5.4-arm64.dmg) |
+| macOS | Universal (Intel + Apple Silicon) | [Download](https://github.com/zixiao-labs/logos/releases/download/v2026.5.4/Logos-2026.5.4-arm64.dmg) |
+| Windows | x64 | [Download](https://github.com/zixiao-labs/logos/releases/download/v2026.5.4/Logos-2026.5.4-arm64.dmg) |
+| Linux | x64 | [Download](https://github.com/zixao-labs/logos/releases/download/v2026.5.4/Logos-2026.5.4-arm64.dmg) |
+| Linux | arm64 | [Download](https://github.com/zixiao-labs/logos/releases/download/v2026.5.4/Logos-2026.5.4-arm64.dmg) |
 
 ### Package Managers
 
 ```bash
 # macOS (Homebrew)
-brew tap Zixiao-System/tap
+brew tap zixiao-labs/tap
 brew install --cask logos
 
 # Arch Linux (AUR)
@@ -127,7 +127,7 @@ xattr -cr /Applications/Logos.app
 
 ```bash
 # Clone the repository
-git clone https://github.com/Zixiao-System/logos-ide.git
+git clone https://github.com/zixiao-labs/logos-ide.git
 cd lsp-ide
 
 # Install dependencies
@@ -282,9 +282,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 <div align="center">
 
-**Built with passion by the Zixiao System Team**
+**Built with passion by the zixiao-labs Team**
 
 [Website](https://zixiao.io) | [Twitter](https://twitter.com/zixiao_system) | [Discord](https://discord.gg/zixiao)
 
 </div>
+
+
 

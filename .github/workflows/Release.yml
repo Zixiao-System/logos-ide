@@ -207,7 +207,7 @@ jobs:
       - name: Checkout homebrew-tap repo
         uses: actions/checkout@v4
         with:
-          repository: Zixiao-System/homebrew-tap
+          repository: zixiao-labs/homebrew-tap
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           path: homebrew-tap
 

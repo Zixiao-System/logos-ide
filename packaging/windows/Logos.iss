@@ -5,7 +5,7 @@
 #define AppName "Logos"
 #define AppPublisher "Zixiao System"
 #define AppId "io.zixiao.logos"
-#define AppURL "https://github.com/Zixiao-System/logos"
+#define AppURL "https://github.com/zixiao-labs/logos"
 #define AppExeName "Logos.exe"
 #define AppSource "..\..\release\win-unpacked"
 #define AppIcon "..\..\build\icon.ico"

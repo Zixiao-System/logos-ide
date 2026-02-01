@@ -61,7 +61,7 @@ logos-ide/
 
 ### Phase 1: Preparation (Before Migration)
 
-- [ ] **1.1** Create new GitHub repository: `logos-ide` or `Zixiao-System/logos-ide`
+- [ ] **1.1** Create new GitHub repository: `logos-ide` or `zixiao-labs/logos-ide`
 - [ ] **1.2** Set up repository settings (branch protection, secrets, etc.)
 - [ ] **1.3** Prepare CI/CD workflow files
 - [ ] **1.4** Create standalone documentation
@@ -138,11 +138,11 @@ logos-ide/
   "description": "logos - A modern, lightweight code editor built with Electron and Vue 3",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Zixiao-System/logos-ide.git"
+    "url": "https://github.com/zixiao-labs/logos-ide.git"
   },
-  "homepage": "https://github.com/Zixiao-System/logos-ide",
+  "homepage": "https://github.com/zixiao-labs/logos-ide",
   "bugs": {
-    "url": "https://github.com/Zixiao-System/logos-ide/issues"
+    "url": "https://github.com/zixiao-labs/logos-ide/issues"
   }
 }
 ```
@@ -222,14 +222,14 @@ After migration, PRTS can integrate Logos IDE in several ways:
 
 ### Option 1: Git Submodule
 ```bash
-git submodule add https://github.com/Zixiao-System/logos-ide.git ide
+git submodule add https://github.com/zixiao-labs/logos-ide.git ide
 ```
 
 ### Option 2: npm Dependency
 ```json
 {
   "dependencies": {
-    "logos-ide": "github:Zixiao-System/lsp-ide"
+    "logos-ide": "github:zixiao-labs/lsp-ide"
   }
 }
 ```

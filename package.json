@@ -3,7 +3,7 @@
   "version": "2026.5.5",
   "description": "Logos - A Modern, Lightweight Code Editor",
   "author": {
-    "name": "Zixiao System",
+    "name": "Zixiao Labs",
     "email": "hwllochen@qq.com"
   },
   "license": "MIT",
@@ -94,7 +94,7 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "Zixiao-System",
+        "owner": "zixiao-labs",
         "repo": "logos"
       }
     ],

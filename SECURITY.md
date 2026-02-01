@@ -1,4 +1,3 @@
-
 # Security Policy
 
 ## Reporting Security Vulnerabilities
@@ -46,4 +45,4 @@ We monitor security advisories for all dependencies:
 
 ## Security Advisories
 
-For security updates and advisories, follow our [GitHub releases](https://github.com/Zixiao-System/logos/releases).
+For security updates and advisories, follow our [GitHub releases](https://github.com/zixiao-labs/logos/releases).

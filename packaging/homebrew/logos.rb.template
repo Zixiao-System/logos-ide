@@ -2,18 +2,18 @@ cask "logos-editor" do
   version "@@VERSION@@"
 
   on_arm do
-    url "https://github.com/Zixiao-System/logos/releases/download/v#{version}/@@ARM64_FILE@@"
+    url "https://github.com/zixiao-labs/logos/releases/download/v#{version}/@@ARM64_FILE@@"
     sha256 "@@ARM64_SHA@@"
   end
 
   on_intel do
-    url "https://github.com/Zixiao-System/logos/releases/download/v#{version}/@@X64_FILE@@"
+    url "https://github.com/zixiao-labs/logos/releases/download/v#{version}/@@X64_FILE@@"
     sha256 "@@X64_SHA@@"
   end
 
   name "Logos"
   desc "A Modern, Lightweight Code Editor"
-  homepage "https://github.com/Zixiao-System/logos"
+  homepage "https://github.com/zixiao-labs/logos"
 
   livecheck do
     url :url

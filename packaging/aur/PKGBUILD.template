@@ -4,7 +4,7 @@ pkgver=@@VERSION@@
 pkgrel=1
 pkgdesc="A Modern, Lightweight Code Editor"
 arch=('x86_64')
-url="https://github.com/Zixiao-System/logos"
+url="https://github.com/zixiao-labs/logos"
 license=('MIT')
 depends=('gtk3' 'nss' 'alsa-lib' 'libxss' 'libxtst')
 optdepends=(
@@ -14,7 +14,7 @@ optdepends=(
 )
 provides=('logos')
 conflicts=('logos' 'logos-git')
-source_x86_64=("${pkgname}-${pkgver}.AppImage::https://github.com/Zixiao-System/logos/releases/download/v${pkgver}/@@APPIMAGE_NAME@@")
+source_x86_64=("${pkgname}-${pkgver}.AppImage::https://github.com/zixiao-labs/logos/releases/download/v${pkgver}/@@APPIMAGE_NAME@@")
 sha256sums_x86_64=('@@APPIMAGE_SHA@@')
 options=('!strip')
 

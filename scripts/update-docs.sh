@@ -16,7 +16,7 @@ if [[ -z "${GH_TOKEN:-}" ]]; then
   exit 1
 fi
 
-REPO="Zixiao-System/logos"
+REPO="zixiao-labs/logos"
 BASE_URL="https://github.com/${REPO}/releases/download/v${VERSION}"
 BRANCH="docs/release-v${VERSION}"
 
