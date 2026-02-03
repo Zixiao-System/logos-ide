@@ -79,34 +79,6 @@ const openRemoteFile = async (filePath: string) => {
     editorStore.openRemoteFile(filePath, content, fileName)
   }
 }
-
-const isFolderExpanded = (path: string) => {
-  return remoteStore.isFolderExpanded(path)
-}
-
-const getFileIcon = (node: RemoteFileNode) => {
-  if (node.isDirectory) {
-    return isFolderExpanded(node.path) ? 'folder-open' : 'folder'
-  }
-
-  const ext = node.name.split('.').pop()?.toLowerCase()
-  switch (ext) {
-    case 'ts':
-    case 'tsx':
-      return 'code'
-    case 'js':
-    case 'jsx':
-      return 'code'
-    case 'vue':
-      return 'code'
-    case 'json':
-      return 'code'
-    case 'md':
-      return 'description'
-    default:
-      return 'description'
-  }
-}
 </script>
 
 <template>
