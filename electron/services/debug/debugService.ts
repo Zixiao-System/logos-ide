@@ -9,6 +9,10 @@ import * as path from 'path'
 import * as fs from 'fs'
 import * as crypto from 'crypto'
 import { DAPClient } from './DAPClient'
+import { StdioTransport } from './transports/stdioTransport'
+import type { ITransport } from './transports/types'
+import { getAdapterManager } from './adapters'
+import type { AdapterType, AdapterInfo, DetectedDebugger } from './adapters'
 import type {
   DebugSession,
   DebugConfig,
@@ -37,10 +41,25 @@ export class DebugService extends EventEmitter {
   private getMainWindow: () => BrowserWindow | null
   private nextBreakpointId: number = 1
   private nextWatchId: number = 1
+  private activeFilePath: string | null = null
 
   constructor(getMainWindow: () => BrowserWindow | null) {
     super()
     this.getMainWindow = getMainWindow
+  }
+
+  /**
+   * Set the currently active file path for variable substitution
+   */
+  setActiveFile(filePath: string | null): void {
+    this.activeFilePath = filePath
+  }
+
+  /**
+   * Get the currently active file path
+   */
+  getActiveFile(): string | null {
+    return this.activeFilePath
   }
 
   // ============ Session Management ============
@@ -636,27 +655,86 @@ export class DebugService extends EventEmitter {
   }
 
   private async startDebugAdapter(config: DebugConfig, workspaceFolder: string): Promise<{ client: DAPClient; process?: ChildProcess }> {
-    // For Node.js, we use the built-in inspector protocol
-    if (config.type === 'node') {
-      return await this.startNodeDebugAdapter(config, workspaceFolder)
+    const adapterManager = getAdapterManager()
+    const adapterType = config.type as AdapterType
+
+    // Check for remote debugging configuration
+    if ('remote' in config && config.remote) {
+      const remoteConfig = config.remote as {
+        connectionId: string
+        remoteHost: string
+        remotePort: number
+        localRoot?: string
+        remoteRoot?: string
+      }
+
+      const transport = adapterManager.createSSHTransport({
+        connectionId: remoteConfig.connectionId,
+        remoteHost: remoteConfig.remoteHost,
+        remotePort: remoteConfig.remotePort,
+        localRoot: remoteConfig.localRoot || workspaceFolder,
+        remoteRoot: remoteConfig.remoteRoot
+      })
+
+      const client = new DAPClient(transport)
+      await client.start()
+      return { client }
     }
 
-    // For other adapters, spawn the adapter process
-    // This is a simplified version - in production, you'd need adapter-specific logic
-    throw new Error(`Debug adapter for ${config.type} not yet implemented`)
+    // Try to create transport via AdapterManager
+    try {
+      const transport = await adapterManager.createTransport(adapterType, workspaceFolder)
+      const client = new DAPClient(transport)
+      await client.start()
+      return { client }
+    } catch (err) {
+      // Fallback for Node.js
+      if (config.type === 'node') {
+        return await this.startNodeDebugAdapter(config, workspaceFolder)
+      }
+      throw err
+    }
   }
 
   private async startNodeDebugAdapter(_config: DebugConfig, _workspaceFolder: string): Promise<{ client: DAPClient; process?: ChildProcess }> {
-    // For Node.js debugging, we use the js-debug adapter from VS Code
-    // In a real implementation, you would bundle this adapter or use a library
+    // Fallback: Create a stdio transport for the Node.js debug adapter
+    const transport: ITransport = new StdioTransport({
+      adapterPath: 'node',
+      adapterArgs: ['--inspect-brk']
+    })
 
-    // For now, we'll create a simple adapter that connects to Node's inspector
-    const client = new DAPClient('node', ['--inspect-brk'])
+    const client = new DAPClient(transport)
 
     // Start the adapter
     await client.start()
 
     return { client }
+  }
+
+  // ============ Adapter Management Methods ============
+
+  /**
+   * Get available debug adapters
+   */
+  async getAvailableAdapters(): Promise<AdapterInfo[]> {
+    const adapterManager = getAdapterManager()
+    return adapterManager.getAvailableAdapters()
+  }
+
+  /**
+   * Get installed debug adapters
+   */
+  async getInstalledAdapters(): Promise<AdapterInfo[]> {
+    const adapterManager = getAdapterManager()
+    return adapterManager.getInstalledAdapters()
+  }
+
+  /**
+   * Detect debuggers for a workspace
+   */
+  async detectDebuggers(workspaceFolder: string): Promise<DetectedDebugger[]> {
+    const adapterManager = getAdapterManager()
+    return adapterManager.detectDebuggers(workspaceFolder)
   }
 
   private setupClientEventHandlers(sessionId: string, client: DAPClient): void {
@@ -785,22 +863,50 @@ export class DebugService extends EventEmitter {
 
   private prepareLaunchArgs(config: LaunchConfig, workspaceFolder: string): object {
     const args = { ...config }
+    const activeFile = this.activeFilePath || ''
 
-    // Replace variables
+    // Compute file-related variables
+    const fileBasename = activeFile ? path.basename(activeFile) : ''
+    const fileExtname = activeFile ? path.extname(activeFile) : ''
+    const fileBasenameNoExtension = fileBasename ? fileBasename.slice(0, -fileExtname.length || fileBasename.length) : ''
+    const fileDirname = activeFile ? path.dirname(activeFile) : ''
+    const relativeFile = activeFile && workspaceFolder
+      ? path.relative(workspaceFolder, activeFile)
+      : ''
+
+    // Replace variables in string values
     const replaceVars = (str: string): string => {
       return str
         .replace(/\$\{workspaceFolder\}/g, workspaceFolder)
-        .replace(/\$\{file\}/g, '') // Would need current file from renderer
+        .replace(/\$\{file\}/g, activeFile)
+        .replace(/\$\{fileBasename\}/g, fileBasename)
+        .replace(/\$\{fileBasenameNoExtension\}/g, fileBasenameNoExtension)
+        .replace(/\$\{fileDirname\}/g, fileDirname)
+        .replace(/\$\{fileExtname\}/g, fileExtname)
+        .replace(/\$\{relativeFile\}/g, relativeFile)
+        .replace(/\$\{relativeFileDirname\}/g, relativeFile ? path.dirname(relativeFile) : '')
     }
 
-    if (args.program && typeof args.program === 'string') {
-      args.program = replaceVars(args.program)
-    }
-    if (args.cwd && typeof args.cwd === 'string') {
-      args.cwd = replaceVars(args.cwd)
+    // Recursively replace variables in object values
+    const replaceInObject = (obj: Record<string, unknown>): Record<string, unknown> => {
+      const result: Record<string, unknown> = {}
+      for (const [key, value] of Object.entries(obj)) {
+        if (typeof value === 'string') {
+          result[key] = replaceVars(value)
+        } else if (Array.isArray(value)) {
+          result[key] = value.map(item =>
+            typeof item === 'string' ? replaceVars(item) : item
+          )
+        } else if (value !== null && typeof value === 'object') {
+          result[key] = replaceInObject(value as Record<string, unknown>)
+        } else {
+          result[key] = value
+        }
+      }
+      return result
     }
 
-    return args
+    return replaceInObject(args as unknown as Record<string, unknown>)
   }
 
   private prepareAttachArgs(config: AttachConfig): object {

@@ -767,6 +767,97 @@ interface LaunchConfigFile {
   }>
 }
 
+/** 调试适配器类型 */
+type AdapterType = 'node' | 'python' | 'cppdbg' | 'lldb' | 'go'
+
+/** 调试适配器信息 */
+interface AdapterInfo {
+  type: AdapterType
+  displayName: string
+  languages: string[]
+  installed: boolean
+  version?: string
+  binaryPath?: string
+  description?: string
+}
+
+/** 检测到的调试器 */
+interface DetectedDebugger {
+  type: AdapterType
+  displayName: string
+  confidence: 'high' | 'medium' | 'low'
+  reason: string
+}
+
+// ============ Remote Development Types ============
+
+/** SSH 认证方式 */
+type AuthMethod = 'password' | 'key' | 'agent'
+
+/** 连接状态 */
+type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error'
+
+/** SSH 连接配置 */
+interface SSHConnectionConfig {
+  id?: string
+  name: string
+  host: string
+  port: number
+  username: string
+  authMethod: AuthMethod
+  password?: string
+  privateKeyPath?: string
+  passphrase?: string
+  remoteWorkspacePath?: string
+  keepAliveInterval?: number
+}
+
+/** 远程连接 */
+interface RemoteConnection {
+  id: string
+  config: SSHConnectionConfig
+  state: ConnectionState
+  error?: string
+  connectedAt?: number
+  fingerprint?: string
+}
+
+/** 远程文件节点 */
+interface RemoteFileNode {
+  name: string
+  path: string
+  isDirectory: boolean
+  children?: RemoteFileNode[]
+}
+
+/** 远程文件状态 */
+interface RemoteFileStat {
+  name: string
+  path: string
+  isDirectory: boolean
+  isFile: boolean
+  isSymlink: boolean
+  size: number
+  mtime: number
+  atime: number
+  mode: number
+}
+
+/** 远程终端选项 */
+interface RemoteTerminalOptions {
+  cwd?: string
+  cols?: number
+  rows?: number
+  env?: Record<string, string>
+}
+
+/** 远程操作结果 */
+interface RemoteOperationResult<T = void> {
+  success: boolean
+  data?: T
+  error?: string
+}
+
 // 暴露给渲染进程的 API
 contextBridge.exposeInMainWorld('electronAPI', {
   // ============ 应用信息 ============
@@ -2015,6 +2106,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getDefaultLaunchConfig: (type: string, workspaceFolder: string): Promise<DebugConfig> =>
       ipcRenderer.invoke('debug:getDefaultLaunchConfig', type, workspaceFolder),
 
+    // 适配器管理
+    getAvailableAdapters: (): Promise<{ success: boolean; adapters?: AdapterInfo[]; error?: string }> =>
+      ipcRenderer.invoke('debug:getAvailableAdapters'),
+
+    getInstalledAdapters: (): Promise<{ success: boolean; adapters?: AdapterInfo[]; error?: string }> =>
+      ipcRenderer.invoke('debug:getInstalledAdapters'),
+
+    detectDebuggers: (workspaceFolder: string): Promise<{ success: boolean; debuggers?: DetectedDebugger[]; error?: string }> =>
+      ipcRenderer.invoke('debug:detectDebuggers', workspaceFolder),
+
+    // 活动文件管理
+    setActiveFile: (filePath: string | null): Promise<void> =>
+      ipcRenderer.invoke('debug:setActiveFile', filePath),
+
+    getActiveFile: (): Promise<string | null> =>
+      ipcRenderer.invoke('debug:getActiveFile'),
+
     // 事件监听
     onSessionCreated: (callback: (session: DebugSession) => void) => {
       const handler = (_: Electron.IpcRendererEvent, session: DebugSession) => callback(session)
@@ -2104,6 +2212,130 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const handler = (_: Electron.IpcRendererEvent, sessionId: string) => callback(sessionId)
       ipcRenderer.on('debug:activeSessionChanged', handler)
       return () => ipcRenderer.removeListener('debug:activeSessionChanged', handler)
+    }
+  },
+
+  // ============ 远程开发 ============
+  remote: {
+    // 连接管理
+    connect: (config: SSHConnectionConfig): Promise<RemoteOperationResult<RemoteConnection>> =>
+      ipcRenderer.invoke('remote:connect', config),
+
+    disconnect: (connectionId: string): Promise<RemoteOperationResult> =>
+      ipcRenderer.invoke('remote:disconnect', connectionId),
+
+    getConnection: (connectionId: string): Promise<RemoteConnection | undefined> =>
+      ipcRenderer.invoke('remote:getConnection', connectionId),
+
+    listConnections: (): Promise<RemoteConnection[]> =>
+      ipcRenderer.invoke('remote:listConnections'),
+
+    testConnection: (config: SSHConnectionConfig): Promise<RemoteOperationResult> =>
+      ipcRenderer.invoke('remote:testConnection', config),
+
+    // 保存的连接
+    saveConnection: (config: SSHConnectionConfig): Promise<RemoteOperationResult<SSHConnectionConfig>> =>
+      ipcRenderer.invoke('remote:saveConnection', config),
+
+    deleteSavedConnection: (connectionId: string): Promise<RemoteOperationResult> =>
+      ipcRenderer.invoke('remote:deleteSavedConnection', connectionId),
+
+    getSavedConnections: (): Promise<SSHConnectionConfig[]> =>
+      ipcRenderer.invoke('remote:getSavedConnections'),
+
+    // 文件系统操作
+    fs: {
+      readDirectory: (connectionId: string, dirPath: string, recursive?: boolean): Promise<RemoteOperationResult<RemoteFileNode[]>> =>
+        ipcRenderer.invoke('remote:fs:readDirectory', connectionId, dirPath, recursive),
+
+      readFile: (connectionId: string, filePath: string): Promise<RemoteOperationResult<string>> =>
+        ipcRenderer.invoke('remote:fs:readFile', connectionId, filePath),
+
+      writeFile: (connectionId: string, filePath: string, content: string): Promise<RemoteOperationResult> =>
+        ipcRenderer.invoke('remote:fs:writeFile', connectionId, filePath, content),
+
+      createFile: (connectionId: string, filePath: string, content?: string): Promise<RemoteOperationResult> =>
+        ipcRenderer.invoke('remote:fs:createFile', connectionId, filePath, content),
+
+      createDirectory: (connectionId: string, dirPath: string): Promise<RemoteOperationResult> =>
+        ipcRenderer.invoke('remote:fs:createDirectory', connectionId, dirPath),
+
+      deleteItem: (connectionId: string, itemPath: string): Promise<RemoteOperationResult> =>
+        ipcRenderer.invoke('remote:fs:deleteItem', connectionId, itemPath),
+
+      renameItem: (connectionId: string, oldPath: string, newPath: string): Promise<RemoteOperationResult> =>
+        ipcRenderer.invoke('remote:fs:renameItem', connectionId, oldPath, newPath),
+
+      exists: (connectionId: string, itemPath: string): Promise<boolean> =>
+        ipcRenderer.invoke('remote:fs:exists', connectionId, itemPath),
+
+      stat: (connectionId: string, itemPath: string): Promise<RemoteOperationResult<RemoteFileStat>> =>
+        ipcRenderer.invoke('remote:fs:stat', connectionId, itemPath)
+    },
+
+    // 终端操作
+    terminal: {
+      create: (connectionId: string, terminalId: string, options?: RemoteTerminalOptions): Promise<RemoteOperationResult> =>
+        ipcRenderer.invoke('remote:terminal:create', connectionId, terminalId, options),
+
+      write: (connectionId: string, terminalId: string, data: string): Promise<RemoteOperationResult> =>
+        ipcRenderer.invoke('remote:terminal:write', connectionId, terminalId, data),
+
+      resize: (connectionId: string, terminalId: string, cols: number, rows: number): Promise<RemoteOperationResult> =>
+        ipcRenderer.invoke('remote:terminal:resize', connectionId, terminalId, cols, rows),
+
+      destroy: (connectionId: string, terminalId: string): Promise<RemoteOperationResult> =>
+        ipcRenderer.invoke('remote:terminal:destroy', connectionId, terminalId)
+    },
+
+    // 端口转发
+    port: {
+      forward: (connectionId: string, config: { localPort: number; remoteHost: string; remotePort: number }): Promise<RemoteOperationResult<{ id: string; connectionId: string; config: { localPort: number; remoteHost: string; remotePort: number }; state: string; error?: string }>> =>
+        ipcRenderer.invoke('remote:port:forward', connectionId, config),
+
+      unforward: (forwardId: string): Promise<RemoteOperationResult> =>
+        ipcRenderer.invoke('remote:port:unforward', forwardId),
+
+      list: (connectionId: string): Promise<Array<{ id: string; connectionId: string; config: { localPort: number; remoteHost: string; remotePort: number }; state: string; error?: string }>> =>
+        ipcRenderer.invoke('remote:port:list', connectionId)
+    },
+
+    // 文件监视
+    watch: (connectionId: string, remotePath: string): Promise<RemoteOperationResult<string>> =>
+      ipcRenderer.invoke('remote:watch', connectionId, remotePath),
+
+    unwatch: (watchId: string): Promise<RemoteOperationResult> =>
+      ipcRenderer.invoke('remote:unwatch', watchId),
+
+    // 事件监听
+    onConnectionStateChanged: (callback: (data: { connectionId: string; state: ConnectionState; error?: string }) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, data: { connectionId: string; state: ConnectionState; error?: string }) => callback(data)
+      ipcRenderer.on('remote:connectionStateChanged', handler)
+      return () => ipcRenderer.removeListener('remote:connectionStateChanged', handler)
+    },
+
+    onTerminalData: (callback: (data: { connectionId: string; terminalId: string; data: string }) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, data: { connectionId: string; terminalId: string; data: string }) => callback(data)
+      ipcRenderer.on('remote:terminal:data', handler)
+      return () => ipcRenderer.removeListener('remote:terminal:data', handler)
+    },
+
+    onTerminalExit: (callback: (data: { connectionId: string; terminalId: string; exitCode?: number }) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, data: { connectionId: string; terminalId: string; exitCode?: number }) => callback(data)
+      ipcRenderer.on('remote:terminal:exit', handler)
+      return () => ipcRenderer.removeListener('remote:terminal:exit', handler)
+    },
+
+    onPortForwardChanged: (callback: (data: { forwardId: string; state: string; error?: string }) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, data: { forwardId: string; state: string; error?: string }) => callback(data)
+      ipcRenderer.on('remote:port:changed', handler)
+      return () => ipcRenderer.removeListener('remote:port:changed', handler)
+    },
+
+    onFileChanged: (callback: (data: { connectionId: string; type: 'created' | 'changed' | 'deleted'; path: string; isDirectory: boolean }) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, data: { connectionId: string; type: 'created' | 'changed' | 'deleted'; path: string; isDirectory: boolean }) => callback(data)
+      ipcRenderer.on('remote:fileChanged', handler)
+      return () => ipcRenderer.removeListener('remote:fileChanged', handler)
     }
   },
 
@@ -3182,6 +3414,10 @@ declare global {
         onWatchRemoved: (callback: (watchId: string) => void) => () => void
         onWatchUpdated: (callback: (watch: WatchExpression) => void) => () => void
         onActiveSessionChanged: (callback: (sessionId: string) => void) => () => void
+
+        // 活动文件管理
+        setActiveFile: (filePath: string | null) => Promise<void>
+        getActiveFile: () => Promise<string | null>
       }
 
       // 自动更新
@@ -3315,6 +3551,60 @@ declare global {
           timestamp: number
           recommendation?: 'switch-to-basic' | 'gc' | 'none'
         }) => void) => () => void
+      }
+
+      // 远程开发
+      remote?: {
+        // 连接管理
+        connect: (config: SSHConnectionConfig) => Promise<RemoteOperationResult<RemoteConnection>>
+        disconnect: (connectionId: string) => Promise<RemoteOperationResult>
+        getConnection: (connectionId: string) => Promise<RemoteConnection | undefined>
+        listConnections: () => Promise<RemoteConnection[]>
+        testConnection: (config: SSHConnectionConfig) => Promise<RemoteOperationResult>
+
+        // 保存的连接
+        saveConnection: (config: SSHConnectionConfig) => Promise<RemoteOperationResult<SSHConnectionConfig>>
+        deleteSavedConnection: (connectionId: string) => Promise<RemoteOperationResult>
+        getSavedConnections: () => Promise<SSHConnectionConfig[]>
+
+        // 文件系统操作
+        fs: {
+          readDirectory: (connectionId: string, dirPath: string, recursive?: boolean) => Promise<RemoteOperationResult<RemoteFileNode[]>>
+          readFile: (connectionId: string, filePath: string) => Promise<RemoteOperationResult<string>>
+          writeFile: (connectionId: string, filePath: string, content: string) => Promise<RemoteOperationResult>
+          createFile: (connectionId: string, filePath: string, content?: string) => Promise<RemoteOperationResult>
+          createDirectory: (connectionId: string, dirPath: string) => Promise<RemoteOperationResult>
+          deleteItem: (connectionId: string, itemPath: string) => Promise<RemoteOperationResult>
+          renameItem: (connectionId: string, oldPath: string, newPath: string) => Promise<RemoteOperationResult>
+          exists: (connectionId: string, itemPath: string) => Promise<boolean>
+          stat: (connectionId: string, itemPath: string) => Promise<RemoteOperationResult<RemoteFileStat>>
+        }
+
+        // 终端操作
+        terminal: {
+          create: (connectionId: string, terminalId: string, options?: RemoteTerminalOptions) => Promise<RemoteOperationResult>
+          write: (connectionId: string, terminalId: string, data: string) => Promise<RemoteOperationResult>
+          resize: (connectionId: string, terminalId: string, cols: number, rows: number) => Promise<RemoteOperationResult>
+          destroy: (connectionId: string, terminalId: string) => Promise<RemoteOperationResult>
+        }
+
+        // 端口转发
+        port: {
+          forward: (connectionId: string, config: { localPort: number; remoteHost: string; remotePort: number }) => Promise<RemoteOperationResult<{ id: string; connectionId: string; config: { localPort: number; remoteHost: string; remotePort: number }; state: string; error?: string }>>
+          unforward: (forwardId: string) => Promise<RemoteOperationResult>
+          list: (connectionId: string) => Promise<Array<{ id: string; connectionId: string; config: { localPort: number; remoteHost: string; remotePort: number }; state: string; error?: string }>>
+        }
+
+        // 文件监视
+        watch: (connectionId: string, remotePath: string) => Promise<RemoteOperationResult<string>>
+        unwatch: (watchId: string) => Promise<RemoteOperationResult>
+
+        // 事件监听
+        onConnectionStateChanged: (callback: (data: { connectionId: string; state: ConnectionState; error?: string }) => void) => () => void
+        onTerminalData: (callback: (data: { connectionId: string; terminalId: string; data: string }) => void) => () => void
+        onTerminalExit: (callback: (data: { connectionId: string; terminalId: string; exitCode?: number }) => void) => () => void
+        onPortForwardChanged: (callback: (data: { forwardId: string; state: string; error?: string }) => void) => () => void
+        onFileChanged: (callback: (data: { connectionId: string; type: 'created' | 'changed' | 'deleted'; path: string; isDirectory: boolean }) => void) => () => void
       }
     }
   }

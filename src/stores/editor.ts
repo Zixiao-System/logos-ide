@@ -137,6 +137,39 @@ export const useEditorStore = defineStore('editor', {
     },
 
     /**
+     * 打开远程文件
+     */
+    openRemoteFile(remotePath: string, content: string, filename: string) {
+      // Use ssh:// URI scheme for remote files
+      const uri = `ssh://${remotePath}`
+      const existingTab = this.tabs.find(tab => tab.path === uri)
+      if (existingTab) {
+        this.setActiveTab(existingTab.id)
+        return existingTab
+      }
+
+      const language = detectLanguage(filename)
+
+      const tab: EditorTab = {
+        id: generateId(),
+        path: uri,
+        filename,
+        language,
+        content,
+        originalContent: content,
+        isDirty: false,
+        cursorPosition: { line: 1, column: 1 },
+        scrollPosition: { top: 0, left: 0 },
+        isRemote: true
+      }
+
+      this.tabs.push(tab)
+      this.setActiveTab(tab.id)
+
+      return tab
+    },
+
+    /**
      * 关闭标签页
      */
     closeTab(id: string) {
@@ -203,6 +236,12 @@ export const useEditorStore = defineStore('editor', {
       const tab = this.tabs.find(t => t.id === id)
       if (tab) {
         this.activeTabId = id
+        // Notify debug service of active file for variable substitution
+        if (window.electronAPI?.debug?.setActiveFile) {
+          // Only set for local files (not remote or virtual files)
+          const filePath = tab.path && !tab.path.includes('://') ? tab.path : null
+          window.electronAPI.debug.setActiveFile(filePath)
+        }
       }
     },
 

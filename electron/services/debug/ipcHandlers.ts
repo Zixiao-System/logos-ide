@@ -271,6 +271,45 @@ export function registerDebugHandlers(getMainWindow: () => BrowserWindow | null)
   ipcMain.handle('debug:getDefaultLaunchConfig', (_, type: string, workspaceFolder: string) => {
     return debugService.getDefaultLaunchConfig(type, workspaceFolder)
   })
+
+  // ============ Adapter Management ============
+
+  ipcMain.handle('debug:getAvailableAdapters', async () => {
+    try {
+      const adapters = await debugService.getAvailableAdapters()
+      return { success: true, adapters }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  ipcMain.handle('debug:getInstalledAdapters', async () => {
+    try {
+      const adapters = await debugService.getInstalledAdapters()
+      return { success: true, adapters }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  ipcMain.handle('debug:detectDebuggers', async (_, workspaceFolder: string) => {
+    try {
+      const debuggers = await debugService.detectDebuggers(workspaceFolder)
+      return { success: true, debuggers }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // ============ Active File Management ============
+
+  ipcMain.handle('debug:setActiveFile', (_, filePath: string | null) => {
+    debugService.setActiveFile(filePath)
+  })
+
+  ipcMain.handle('debug:getActiveFile', () => {
+    return debugService.getActiveFile()
+  })
 }
 
 export { cleanupDebugService }

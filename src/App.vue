@@ -9,6 +9,7 @@ import { useBottomPanelStore } from '@/stores/bottomPanel'
 import { useIntelligenceStore } from '@/stores/intelligence'
 import { useFileExplorerStore } from '@/stores/fileExplorer'
 import { useNotificationStore } from '@/stores/notification'
+import { useRemoteStore } from '@/stores/remote'
 import { FileExplorer } from '@/components/FileExplorer'
 import { GitPanel } from '@/components/Git'
 import { BottomPanel } from '@/components/BottomPanel'
@@ -25,6 +26,7 @@ import LSPSetupDialog from '@/components/LSPSetupDialog.vue'
 import FeedbackReportDialog from '@/components/FeedbackReportDialog.vue'
 import NotificationContainer from '@/components/common/NotificationContainer.vue'
 import { DebugSidebarPanel } from '@/components/Debug'
+import { RemoteExplorer } from '@/components/Remote'
 import { IntelligenceModeIndicator } from '@/components/StatusBar'
 import { GitOperationIndicator } from '@/components/StatusBar'
 import type { IndexingProgress, LanguageServerStatus } from '@/types/intelligence'
@@ -56,6 +58,7 @@ import '@mdui/icons/analytics.js'
 import '@mdui/icons/bug-report.js'
 import '@mdui/icons/history.js'
 import '@mdui/icons/extension.js'
+import '@mdui/icons/cloud.js'
 
 
 const router = useRouter()
@@ -72,6 +75,7 @@ const extensionPanelsStore = useExtensionPanelsStore()
 const extensionStatusBarStore = useExtensionStatusBarStore()
 const problemsStore = useProblemsStore()
 const notificationStore = useNotificationStore()
+const remoteStore = useRemoteStore()
 
 const commandPaletteRef = ref<InstanceType<typeof CommandPalette> | null>(null)
 const commandCenterRef = ref<HTMLElement | null>(null)
@@ -369,6 +373,7 @@ type SidebarPanelItem = {
 
 const basePanelItems: SidebarPanelItem[] = [
   { id: 'explorer', icon: 'folder', label: '资源管理器' },
+  { id: 'remote', icon: 'cloud', label: '远程开发' },
   { id: 'git', icon: 'source', label: '源代码管理' },
   { id: 'search', icon: 'search', label: '搜索' },
   { id: 'debug', icon: 'bug-report', label: '运行和调试' },
@@ -645,6 +650,7 @@ onUnmounted(() => {
         >
           <img v-if="panel.iconUrl" class="extension-activity-icon" :src="panel.iconUrl" alt="" />
           <mdui-icon-folder v-else-if="panel.icon === 'folder'"></mdui-icon-folder>
+          <mdui-icon-cloud v-else-if="panel.icon === 'cloud'"></mdui-icon-cloud>
           <mdui-icon-source v-else-if="panel.icon === 'source'"></mdui-icon-source>
           <mdui-icon-search v-else-if="panel.icon === 'search'"></mdui-icon-search>
           <mdui-icon-bug-report v-else-if="panel.icon === 'bug-report'"></mdui-icon-bug-report>
@@ -686,6 +692,9 @@ onUnmounted(() => {
     >
       <!-- 资源管理器面板 -->
       <FileExplorer v-if="activeSidebarPanel === 'explorer'" />
+
+      <!-- 远程开发面板 -->
+      <RemoteExplorer v-else-if="activeSidebarPanel === 'remote'" />
 
       <!-- Git 面板 -->
       <GitPanel v-else-if="activeSidebarPanel === 'git'" />
@@ -854,6 +863,16 @@ onUnmounted(() => {
         </span>
         <!-- Git 操作状态指示器 (合并/Rebase) -->
         <GitOperationIndicator />
+        <!-- 远程连接状态 -->
+        <span
+          v-if="remoteStore.isConnected"
+          class="status-item clickable remote-status"
+          @click="activeSidebarPanel = 'remote'; sidebarOpen = true"
+          :title="remoteStore.activeConnection ? `${remoteStore.activeConnection.config.username}@${remoteStore.activeConnection.config.host}` : '远程连接'"
+        >
+          <mdui-icon-cloud></mdui-icon-cloud>
+          SSH: {{ remoteStore.activeConnection?.config.name || '已连接' }}
+        </span>
         <span class="status-item" v-if="editorStore.hasUnsavedChanges">
           <mdui-icon-sync></mdui-icon-sync>
           {{ editorStore.dirtyTabs.length }} 未保存

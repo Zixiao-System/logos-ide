@@ -65,7 +65,23 @@ export interface LaunchConfig {
   // Common
   preLaunchTask?: string
   postDebugTask?: string
+  // Remote debugging
+  remote?: RemoteDebugConfig
   [key: string]: unknown
+}
+
+/** Remote debugging configuration */
+export interface RemoteDebugConfig {
+  /** SSH connection ID */
+  connectionId: string
+  /** Remote host where the DAP server is running */
+  remoteHost: string
+  /** Remote port where the DAP server is running */
+  remotePort: number
+  /** Local workspace root for path mapping */
+  localRoot?: string
+  /** Remote workspace root for path mapping */
+  remoteRoot?: string
 }
 
 /** Attach request configuration */

@@ -26,6 +26,8 @@ export interface EditorTab {
   viewState?: unknown
   /** 只读 / 虚拟文档 */
   readOnly?: boolean
+  /** 是否为远程文件 */
+  isRemote?: boolean
 }
 
 /** 光标位置 */

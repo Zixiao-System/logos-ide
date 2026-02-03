@@ -3,8 +3,8 @@
  * Handles low-level communication with debug adapters
  */
 import { EventEmitter } from 'events'
-import { ChildProcess, spawn } from 'child_process'
 import { DebugProtocol } from '@vscode/debugprotocol'
+import type { ITransport } from './transports/types'
 import type {
   Capabilities,
   Source,
@@ -27,16 +27,13 @@ interface PendingRequest {
 export class DAPClient extends EventEmitter {
   private seq: number = 1
   private pendingRequests: Map<number, PendingRequest> = new Map()
-  private adapterProcess: ChildProcess | null = null
-  private buffer: Buffer = Buffer.alloc(0)
   private _capabilities: Capabilities | null = null
   private _initialized: boolean = false
+  private transport: ITransport
 
-  constructor(
-    private adapterPath: string,
-    private adapterArgs: string[] = []
-  ) {
+  constructor(transport: ITransport) {
     super()
+    this.transport = transport
   }
 
   get capabilities(): Capabilities | null {
@@ -51,79 +48,31 @@ export class DAPClient extends EventEmitter {
    * Start the debug adapter process
    */
   async start(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.adapterProcess = spawn(this.adapterPath, this.adapterArgs, {
-        stdio: ['pipe', 'pipe', 'pipe']
-      })
-
-      this.adapterProcess.stdout?.on('data', (data: Buffer) => {
-        this.handleData(data)
-      })
-
-      this.adapterProcess.stderr?.on('data', (data: Buffer) => {
-        console.error('[DAP Adapter Error]:', data.toString())
-      })
-
-      this.adapterProcess.on('error', (err) => {
-        reject(err)
-      })
-
-      this.adapterProcess.on('exit', (code, signal) => {
-        this.emit('exit', { code, signal })
-      })
-
-      // Give the adapter a moment to start
-      setTimeout(resolve, 100)
+    // Set up transport event handlers
+    this.transport.onMessage((message) => {
+      this.handleMessage(message)
     })
+
+    this.transport.onError((error) => {
+      console.error('[DAP Client Error]:', error)
+      this.emit('error', error)
+    })
+
+    this.transport.onClose((code, signal) => {
+      this.emit('exit', { code, signal })
+    })
+
+    // Connect the transport
+    await this.transport.connect()
   }
 
   /**
    * Stop the debug adapter process
    */
   stop(): void {
-    if (this.adapterProcess) {
-      this.adapterProcess.kill()
-      this.adapterProcess = null
-    }
+    this.transport.disconnect()
     this.pendingRequests.clear()
-    this.buffer = Buffer.alloc(0)
     this._initialized = false
-  }
-
-  /**
-   * Handle incoming data from the adapter
-   */
-  private handleData(data: Buffer): void {
-    this.buffer = Buffer.concat([this.buffer, data])
-
-    while (true) {
-      // Parse Content-Length header
-      const headerEnd = this.buffer.indexOf('\r\n\r\n')
-      if (headerEnd === -1) break
-
-      const header = this.buffer.slice(0, headerEnd).toString()
-      const contentLengthMatch = header.match(/Content-Length:\s*(\d+)/i)
-      if (!contentLengthMatch) {
-        this.buffer = this.buffer.slice(headerEnd + 4)
-        continue
-      }
-
-      const contentLength = parseInt(contentLengthMatch[1], 10)
-      const messageStart = headerEnd + 4
-      const messageEnd = messageStart + contentLength
-
-      if (this.buffer.length < messageEnd) break
-
-      const messageBuffer = this.buffer.slice(messageStart, messageEnd)
-      this.buffer = this.buffer.slice(messageEnd)
-
-      try {
-        const message = JSON.parse(messageBuffer.toString()) as DebugProtocol.ProtocolMessage
-        this.handleMessage(message)
-      } catch (err) {
-        console.error('[DAP] Failed to parse message:', err)
-      }
-    }
   }
 
   /**
@@ -202,13 +151,7 @@ export class DAPClient extends EventEmitter {
    * Send a message to the adapter
    */
   private send(message: DebugProtocol.ProtocolMessage): void {
-    if (!this.adapterProcess?.stdin) {
-      throw new Error('Debug adapter not started')
-    }
-
-    const json = JSON.stringify(message)
-    const header = `Content-Length: ${Buffer.byteLength(json)}\r\n\r\n`
-    this.adapterProcess.stdin.write(header + json)
+    this.transport.send(message)
   }
 
   /**

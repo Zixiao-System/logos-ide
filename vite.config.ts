@@ -32,7 +32,7 @@ export default defineConfig({
             sourcemap: true,
           outDir: 'dist-electron',
           rollupOptions: {
-            external: ['electron', 'node-pty']
+            external: ['electron', 'node-pty', 'ssh2']
           }
         }
       }

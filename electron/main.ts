@@ -10,6 +10,7 @@ import { registerGitLabHandlers } from './services/gitlabService'
 import { registerIntelligenceHandlers } from './services/intelligenceService'
 import { registerCommitAnalysisHandlers } from './services/commitAnalysisService'
 import { registerDebugHandlers, cleanupDebugService } from './services/debug/ipcHandlers'
+import { registerRemoteHandlers, cleanupRemoteConnections } from './services/remote'
 import { registerUpdateHandlers } from './services/updateService'
 import { registerLanguageDaemonHandlers, cleanupLanguageDaemon } from './services/languageDaemonHandlers'
 import { registerLSPHandlers, getLSPServerManager } from './services/lspServerManager'
@@ -226,6 +227,9 @@ function registerAllHandlers() {
   // ============ 调试 ============
   registerDebugHandlers(getMainWindow)
 
+  // ============ 远程开发 ============
+  registerRemoteHandlers()
+
   // ============ 自动更新 ============
   registerUpdateHandlers(getMainWindow)
 
@@ -293,6 +297,8 @@ app.on('before-quit', async () => {
   cleanupTerminals()
   // 清理调试会话
   cleanupDebugService()
+  // 清理远程连接
+  cleanupRemoteConnections()
   // 清理语言守护进程
   await cleanupLanguageDaemon()
   await getLSPServerManager().stopAll()
