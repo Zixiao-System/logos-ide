@@ -4,190 +4,88 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-- logos is an Electron-based desktop code editor built with Vue 3, featuring Monaco Editor integration, an integrated terminal with PTY support, and a Material Design UI (MDUI).
+Logos is a desktop code editor built with Electron 40 + Vue 3, featuring Monaco Editor, an integrated terminal (xterm.js + node-pty), MDUI Material Design components, and a Rust-based language analysis daemon. It supports VS Code extension hosting and WASM extensions.
 
-## Development Commands
+## Commands
 
 ```bash
-# Install dependencies (includes native module rebuild for node-pty)
-npm install
+# Setup
+./setup.sh                    # Full setup (install, build daemon, typecheck)
+npm install                   # Install deps (runs electron-rebuild + patch-package)
 
-# Start development server with hot reload
-npm run dev
+# Development
+npm run dev                   # Vite dev server
+npm run electron:dev          # Electron dev mode
 
-# Type checking only (no emit)
-npm run typecheck
+# Build
+npm run build                 # Full: typecheck + vite build + electron-builder
+npm run build:daemon          # Rust daemon only (cd logos-lang && cargo build --release --package logos-daemon)
+./build.sh [all|daemon|frontend]
 
-# Lint and auto-fix
-npm run lint
+# Quality
+npm run typecheck             # vue-tsc --noEmit
+npm run lint                  # ESLint with auto-fix
 
-# Production build (type check + Vite build + Electron packager)
-npm run build
+# Testing (Vitest, happy-dom environment)
+npm run test                  # Run all tests
+npm run test:watch            # Watch mode
+npm run test:coverage         # With v8 coverage
+npx vitest run tests/unit/stores/    # Run a specific test directory
+npx vitest run tests/unit/services/fileService.test.ts  # Run a single test file
 ```
 
 ## Architecture
 
-### Process Model (Electron)
+### Multi-Process Model
 
-**Main Process** (`electron/main.ts`):
-- Window management and lifecycle
-- Registers IPC handlers for all backend services
-- Coordinates cleanup on app exit
+1. **Main Process** (`electron/main.ts`) — Window management, IPC handler registration, service coordination
+2. **Preload** (`electron/preload.ts`) — Context bridge exposing `window.electronAPI` to renderer
+3. **Renderer** (`src/`) — Vue 3 + Pinia app with Monaco Editor
+4. **Rust Daemon** (`logos-lang/`) — Language analysis via LSP protocol (Smart Mode)
+5. **Extension Host** (`electron/extension-host/`) — Separate process running VS Code extensions
 
-**Preload Script** (`electron/preload.ts`):
-- Exposes `window.electronAPI` to renderer via context bridge
-- Provides typed interfaces for file system, Git, and terminal operations
-- All IPC communication flows through this bridge
+### IPC Communication
 
-**Renderer Process** (`src/`):
-- Vue 3 application with Pinia state management
-- Uses MDUI web components (prefix: `mdui-`)
+All renderer-to-main communication goes through `window.electronAPI`:
+- `window.electronAPI.fileSystem.*`, `window.electronAPI.git.*`, `window.electronAPI.terminal.*`, etc.
 
 ### Backend Services (`electron/services/`)
 
-| Service | File | Purpose |
-|---------|------|---------|
-| File System | `fileService.ts` | File/directory operations, file watching |
-| Git | `gitService.ts` | Git operations via CLI wrappers |
-| Terminal | `terminalService.ts` | PTY management with node-pty |
-| Intelligence | `intelligenceService.ts` | Code intelligence mode switching, project analysis |
-| Memory Monitor | `memoryMonitorService.ts` | Memory pressure monitoring, auto-downgrade |
+Key services: `fileService` (file ops, watching), `gitService` (git CLI wrappers), `terminalService` (PTY), `intelligenceService` (diagnostic routing across TypeScript API / LSP / Rust daemon), `extensionService` (VS Code extension host lifecycle), `wasmExtensionService` (WASM extension runtime), `lspServerManager` (language server lifecycle), `languageDaemonHandlers` (Rust daemon bridge), `debugService` (DAP).
 
 ### Frontend State (`src/stores/`)
 
-| Store | Purpose |
-|-------|---------|
-| `editor` | Tab management, cursor positions, dirty state |
-| `fileExplorer` | Directory tree, file selection |
-| `git` | Branch info, staged/unstaged changes |
-| `terminal` | Terminal session state |
-| `theme` | Light/dark mode toggle |
-| `devops` | CI/CD dashboard state |
-| `intelligence` | Smart Mode state, indexing progress, project analysis |
-| `settings` | User preferences, LSP mode, telemetry settings |
+33 Pinia stores organized by feature. Core stores: `editor` (tabs, cursor, dirty state), `fileExplorer` (directory tree), `git` (branches, staging), `intelligence` (Smart/Basic mode state), `settings` (user preferences), `extensions`, `debug`, `theme`.
 
-### Key UI Components
+### Rust Daemon Workspace (`logos-lang/`)
 
-- `src/App.vue` - Main layout: activity bar, sidebar, content area, status bar
-- `src/components/FileExplorer/` - File tree with context menus
-- `src/components/Git/` - Git panel (staging, commits, branches)
-- `src/views/EditorView.vue` - Monaco Editor integration
-- `src/views/TerminalView.vue` - xterm.js terminal
-
-## IPC Communication Pattern
-
-All renderer-to-main communication uses the `window.electronAPI` object:
-- `window.electronAPI.fileSystem.*` - File operations
-- `window.electronAPI.git.*` - Git operations
-- `window.electronAPI.terminal.*` - Terminal operations
-- `window.electronAPI.feedback.*` - Feedback reporting
-
-Example: `await window.electronAPI.fileSystem.readFile(path)`
-
-## Telemetry & Error Reporting
-
-The app uses Sentry for error tracking and session replay:
-
-**Main Process** (`electron/main.ts`):
-- Initializes Sentry with DSN
-- Handles feedback IPC for collecting system state and heap snapshots
-
-**Renderer Process** (`src/main.ts`):
-- Initializes Sentry with Session Replay integration
-- Sample rates: 10% for normal sessions, 100% for error sessions
-
-**Manual Feedback Reporting**:
-- Shortcut: `Cmd/Ctrl + Shift + F`
-- Collects system state, heap snapshot, and submits to Sentry
-- Shows dialog with option to create GitHub Issue
-
-## MDUI Component Usage
-
-MDUI web components are used directly in Vue templates. Configure Vue to recognize them in `vite.config.ts`:
-
-```typescript
-isCustomElement: (tag) => tag.startsWith('mdui-')
-```
-
-Icons are imported individually in `src/main.ts`:
-```typescript
-import '@mdui/icons/folder.js'
-```
-
-## Path Alias
-
-`@/` maps to `src/` (configured in both `tsconfig.json` and `vite.config.ts`).
-## Code Intelligence System
+Cargo workspace with 6 crates: `logos-core` (core processing), `logos-daemon` (LSP server), `logos-parser` (tree-sitter parsers for Python, Go, Rust, C/C++, Java, JS/TS), `logos-semantic` (type checking), `logos-index` (symbol indexing), `logos-refactor` (refactoring).
 
 ### Intelligence Modes
 
-Logos supports two code intelligence modes:
+- **Basic Mode** — Standard LSP servers; fast startup, low memory
+- **Smart Mode** — Full indexing via Rust daemon; adds call hierarchy, impact analysis, safe refactoring
+- **Auto Mode** — Selects based on project size/complexity (>5000 files → Basic)
 
-| Mode | Provider | Features | Use Case |
-|------|----------|----------|----------|
-| **Basic** | Standard LSP | Completions, definitions, references, hover | Fast startup, low memory, large projects |
-| **Smart** | Rust daemon + full indexing | All Basic features + call hierarchy, impact analysis, safe refactoring | Advanced development, refactoring |
+### Extension System
 
-### Mode Switching
+- VS Code extension host runs in a separate process (`electron/extension-host/`)
+- WASM extensions run in a sandboxed runtime with permission enforcement
+- Extension manifests follow VS Code conventions
 
-**Status Bar Indicator**: Click the mode indicator (Basic/Smart) in the status bar to toggle modes.
+## Code Conventions
 
-**Automatic Mode Selection**: Enable "Auto-select based on project" to let the IDE choose the best mode based on:
-- Project size (files > 5000 → Basic Mode)
-- Memory requirements (> 2048MB → Basic Mode)
-- Dependency complexity (complex → Smart Mode)
-- Default for small projects → Basic Mode
+- TypeScript throughout, strict mode enabled (`noUnusedLocals`, `noUnusedParameters`)
+- Path alias: `@/` maps to `src/`
+- Use MDUI web components (`<mdui-*>`) for UI elements, not custom div implementations
+- Use MDUI CSS variables (`--mdui-color-*`) for colors, not hardcoded values
+- Conventional Commits: `<type>(<scope>): <description>` (feat, fix, docs, style, refactor, perf, test, chore)
+- Tests go in `tests/unit/` mirroring source structure (components, services, stores, extension-host)
+- Test environment: Vitest with happy-dom, setup file at `tests/setup.ts`
 
-**Keyboard Shortcuts**:
-- `Ctrl/Cmd + Shift + I`: Toggle between modes
-- `Ctrl/Cmd + Shift + B`: Switch to Basic Mode
-- `Ctrl/Cmd + Shift + M`: Switch to Smart Mode
+## CI Requirements
 
-### Settings Persistence
-
-Mode preferences are automatically saved to localStorage and restored on app startup:
-- Selected mode (Basic/Smart)
-- Auto-select preference
-- Smart Mode thresholds
-
-First-time users see an LSP setup dialog that immediately applies their choice.
-
-### Project Analysis
-
-When opening a project, the system analyzes:
-- File count
-- Estimated memory usage
-- Detected languages
-- Dependency complexity
-
-This information is displayed in the mode indicator menu with a recommendation.
-
-### Monaco Editor Configuration
-
-Monaco's built-in TypeScript diagnostics are disabled to prevent conflicts with LSP/Smart Mode:
-
-```typescript
-monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions({
-  noSemanticValidation: true,
-  noSyntaxValidation: true,
-  noSuggestionDiagnostics: true
-})
-```
-
-This ensures only LSP/Smart Mode diagnostics are shown, maintaining consistency between syntax highlighting and analysis results.
-
-### Key Files
-
-**Frontend**:
-- `src/stores/intelligence.ts` - Intelligence mode state management
-- `src/components/StatusBar/IntelligenceModeIndicator.vue` - Mode indicator UI
-- `src/components/LSPSetupDialog.vue` - First-time setup dialog
-- `src/services/lsp/IntelligenceManager.ts` - Mode coordination
-
-**Backend**:
-- `electron/services/intelligenceService.ts` - IPC handlers for mode switching
-- `electron/services/memoryMonitorService.ts` - Memory pressure monitoring
-
-**Documentation**:
-- `docs/design/mode-switching.md` - Mode switching design
-- `docs/design/phase2-smart-mode.md` - Smart Mode implementation details
+PRs to `main` must pass:
+- **Typecheck & Test** — TypeScript type checking + unit tests
+- **Rust Check** — Cargo verification
+- At least 1 approval, branch must be up-to-date with main
