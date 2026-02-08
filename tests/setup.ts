@@ -140,9 +140,13 @@ const mockElectronAPI = {
     executeInConsole: vi.fn().mockResolvedValue({ success: true, result: null }),
 
     // 启动配置
-    readLaunchConfig: vi.fn().mockResolvedValue({ success: true, config: null }),
+    readLaunchConfig: vi.fn().mockResolvedValue({ success: true, config: null, source: null }),
     writeLaunchConfig: vi.fn().mockResolvedValue({ success: true }),
-    getDefaultLaunchConfig: vi.fn().mockResolvedValue(null),
+    getDefaultLaunchConfig: vi.fn().mockResolvedValue({ success: true, config: null }),
+
+    // 自动生成与导入
+    autoGenerateConfigurations: vi.fn().mockResolvedValue({ success: true, configurations: [] }),
+    importFromVSCode: vi.fn().mockResolvedValue({ success: true }),
 
     // 适配器管理
     getAvailableAdapters: vi.fn().mockResolvedValue({ success: true, adapters: [] }),

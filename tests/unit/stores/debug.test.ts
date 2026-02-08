@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
-import { useDebugStore, type BreakpointInfo, type DebugSession } from '@/stores/debug'
+import { useDebugStore, type BreakpointInfo, type DebugSession, type DetectedDebugger } from '@/stores/debug'
 import { mockElectronAPI, resetAllMocks } from '../../setup'
 
 describe('Debug Store', () => {
@@ -399,6 +399,163 @@ describe('Debug Store', () => {
       expect(store.activeSessionId).toBeNull()
       expect(store.exceptionFilters).toEqual([])
       expect(store.consoleMessages).toEqual([])
+      expect(store.configSource).toBeNull()
+      expect(store.detectedDebuggers).toEqual([])
+      expect(store.autoDetectionDone).toBe(false)
+    })
+  })
+
+  describe('detectDebuggers', () => {
+    it('calls API and populates detectedDebuggers', async () => {
+      const store = useDebugStore()
+      store.setWorkspaceFolder('/test-workspace')
+
+      const mockDebuggers: DetectedDebugger[] = [
+        { type: 'node', displayName: 'Node.js', confidence: 'high', reason: 'package.json found' }
+      ]
+      mockElectronAPI.debug.detectDebuggers.mockResolvedValue({
+        success: true,
+        debuggers: mockDebuggers
+      })
+
+      await store.detectDebuggers()
+
+      expect(mockElectronAPI.debug.detectDebuggers).toHaveBeenCalledWith('/test-workspace')
+      expect(store.detectedDebuggers).toEqual(mockDebuggers)
+      expect(store.autoDetectionDone).toBe(true)
+    })
+
+    it('does nothing without workspace', async () => {
+      const store = useDebugStore()
+      await store.detectDebuggers()
+      expect(mockElectronAPI.debug.detectDebuggers).not.toHaveBeenCalled()
+    })
+
+    it('sets autoDetectionDone even on error', async () => {
+      const store = useDebugStore()
+      store.setWorkspaceFolder('/test-workspace')
+
+      mockElectronAPI.debug.detectDebuggers.mockRejectedValue(new Error('fail'))
+
+      await store.detectDebuggers()
+
+      expect(store.autoDetectionDone).toBe(true)
+    })
+  })
+
+  describe('autoGenerateConfigurations', () => {
+    it('generates and adds configurations', async () => {
+      const store = useDebugStore()
+      store.setWorkspaceFolder('/test-workspace')
+
+      mockElectronAPI.debug.autoGenerateConfigurations.mockResolvedValue({
+        success: true,
+        configurations: [
+          { type: 'node', request: 'launch', name: 'Launch Node.js', program: 'index.js' }
+        ]
+      })
+      mockElectronAPI.debug.writeLaunchConfig.mockResolvedValue({ success: true })
+
+      const result = await store.autoGenerateConfigurations()
+
+      expect(result).toBe(true)
+      expect(store.launchConfigurations).toHaveLength(1)
+      expect(store.selectedConfigIndex).toBe(0)
+      expect(mockElectronAPI.debug.autoGenerateConfigurations).toHaveBeenCalledWith('/test-workspace')
+    })
+
+    it('returns false when no configurations generated', async () => {
+      const store = useDebugStore()
+      store.setWorkspaceFolder('/test-workspace')
+
+      mockElectronAPI.debug.autoGenerateConfigurations.mockResolvedValue({
+        success: true,
+        configurations: []
+      })
+
+      const result = await store.autoGenerateConfigurations()
+
+      expect(result).toBe(false)
+    })
+
+    it('returns false without workspace', async () => {
+      const store = useDebugStore()
+      const result = await store.autoGenerateConfigurations()
+      expect(result).toBe(false)
+    })
+  })
+
+  describe('importFromVSCode', () => {
+    it('calls import and reloads config', async () => {
+      const store = useDebugStore()
+      store.setWorkspaceFolder('/test-workspace')
+
+      mockElectronAPI.debug.importFromVSCode.mockResolvedValue({ success: true })
+      mockElectronAPI.debug.readLaunchConfig.mockResolvedValue({
+        success: true,
+        config: {
+          version: '0.2.0',
+          configurations: [
+            { type: 'node', request: 'launch', name: 'Imported' }
+          ]
+        },
+        source: 'logos'
+      })
+
+      const result = await store.importFromVSCode()
+
+      expect(result).toBe(true)
+      expect(mockElectronAPI.debug.importFromVSCode).toHaveBeenCalledWith('/test-workspace')
+      expect(store.launchConfigurations).toHaveLength(1)
+      expect(store.configSource).toBe('logos')
+    })
+
+    it('returns false when import fails', async () => {
+      const store = useDebugStore()
+      store.setWorkspaceFolder('/test-workspace')
+
+      mockElectronAPI.debug.importFromVSCode.mockResolvedValue({ success: false })
+
+      const result = await store.importFromVSCode()
+
+      expect(result).toBe(false)
+    })
+  })
+
+  describe('loadLaunchConfigurations', () => {
+    it('tracks configSource from readLaunchConfig', async () => {
+      const store = useDebugStore()
+      store.setWorkspaceFolder('/test-workspace')
+
+      mockElectronAPI.debug.readLaunchConfig.mockResolvedValue({
+        success: true,
+        config: {
+          version: '0.2.0',
+          configurations: [{ type: 'python', request: 'launch', name: 'Py' }]
+        },
+        source: 'vscode'
+      })
+
+      await store.loadLaunchConfigurations()
+
+      expect(store.configSource).toBe('vscode')
+      expect(store.launchConfigurations).toHaveLength(1)
+    })
+
+    it('resets configSource when no config found', async () => {
+      const store = useDebugStore()
+      store.setWorkspaceFolder('/test-workspace')
+      store.configSource = 'logos'
+
+      mockElectronAPI.debug.readLaunchConfig.mockResolvedValue({
+        success: true,
+        config: null,
+        source: null
+      })
+
+      await store.loadLaunchConfigurations()
+
+      expect(store.configSource).toBeNull()
     })
   })
 })

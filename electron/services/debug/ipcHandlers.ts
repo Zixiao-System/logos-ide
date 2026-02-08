@@ -285,8 +285,8 @@ export function registerDebugHandlers(getMainWindow: () => BrowserWindow | null)
 
   ipcMain.handle('debug:readLaunchConfig', async (_, workspaceFolder: string) => {
     try {
-      const config = await debugService.readLaunchConfig(workspaceFolder)
-      return { success: true, config }
+      const result = await debugService.readLaunchConfig(workspaceFolder)
+      return { success: true, config: result.config, source: result.source }
     } catch (error) {
       return { success: false, error: (error as Error).message }
     }
@@ -303,6 +303,26 @@ export function registerDebugHandlers(getMainWindow: () => BrowserWindow | null)
 
   ipcMain.handle('debug:getDefaultLaunchConfig', (_, type: string, workspaceFolder: string) => {
     return debugService.getDefaultLaunchConfig(type, workspaceFolder)
+  })
+
+  // ============ Auto-Generation & VS Code Import ============
+
+  ipcMain.handle('debug:autoGenerateConfigurations', async (_, workspaceFolder: string) => {
+    try {
+      const configurations = await debugService.autoGenerateConfigurations(workspaceFolder)
+      return { success: true, configurations }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  ipcMain.handle('debug:importFromVSCode', async (_, workspaceFolder: string) => {
+    try {
+      const imported = await debugService.importFromVSCode(workspaceFolder)
+      return { success: imported }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
   })
 
   // ============ Adapter Management ============

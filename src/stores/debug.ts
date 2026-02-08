@@ -123,7 +123,22 @@ export interface LaunchConfig {
   webRoot?: string
   python?: string
   justMyCode?: boolean
+  // C/C++ specific
+  MIMode?: 'gdb' | 'lldb'
+  miDebuggerPath?: string
+  setupCommands?: Array<{ description?: string; text: string; ignoreFailures?: boolean }>
+  // Go specific
+  mode?: string
+  buildFlags?: string
   [key: string]: unknown
+}
+
+/** 检测到的调试器 */
+export interface DetectedDebugger {
+  type: string
+  displayName: string
+  confidence: 'high' | 'medium' | 'low'
+  reason: string
 }
 
 /** 调试会话 */
@@ -160,6 +175,9 @@ export interface DebugState {
   launchConfigurations: LaunchConfig[]
   selectedConfigIndex: number
   workspaceFolder: string | null
+  configSource: 'logos' | 'vscode' | null
+  detectedDebuggers: DetectedDebugger[]
+  autoDetectionDone: boolean
 
   // 断点
   breakpoints: Map<string, BreakpointInfo[]>  // filePath -> breakpoints
@@ -194,6 +212,9 @@ export const useDebugStore = defineStore('debug', {
     launchConfigurations: [],
     selectedConfigIndex: -1,
     workspaceFolder: null,
+    configSource: null,
+    detectedDebuggers: [],
+    autoDetectionDone: false,
     breakpoints: new Map(),
     currentThreadId: null,
     currentFrameId: null,
@@ -323,6 +344,7 @@ export const useDebugStore = defineStore('debug', {
         const result = await api.readLaunchConfig(this.workspaceFolder)
         if (result.success && result.config) {
           this.launchConfigurations = result.config.configurations || []
+          this.configSource = result.source ?? null
           // 如果有配置但未选中，默认选中第一个
           if (this.launchConfigurations.length > 0 && this.selectedConfigIndex < 0) {
             this.selectedConfigIndex = 0
@@ -330,10 +352,12 @@ export const useDebugStore = defineStore('debug', {
         } else {
           this.launchConfigurations = []
           this.selectedConfigIndex = -1
+          this.configSource = null
         }
       } catch {
         this.launchConfigurations = []
         this.selectedConfigIndex = -1
+        this.configSource = null
       }
     },
 
@@ -403,6 +427,68 @@ export const useDebugStore = defineStore('debug', {
         // 忽略错误
       }
       return null
+    },
+
+    /** 检测调试器 */
+    async detectDebuggers() {
+      if (!this.workspaceFolder) return
+
+      const api = window.electronAPI?.debug
+      if (!api) return
+
+      try {
+        const result = await api.detectDebuggers(this.workspaceFolder)
+        if (result.success && result.debuggers) {
+          this.detectedDebuggers = result.debuggers as DetectedDebugger[]
+        }
+      } catch {
+        // 忽略
+      }
+      this.autoDetectionDone = true
+    },
+
+    /** 自动生成配置 */
+    async autoGenerateConfigurations(): Promise<boolean> {
+      if (!this.workspaceFolder) return false
+
+      const api = window.electronAPI?.debug
+      if (!api) return false
+
+      try {
+        const result = await api.autoGenerateConfigurations(this.workspaceFolder)
+        if (result.success && result.configurations && result.configurations.length > 0) {
+          for (const config of result.configurations) {
+            this.launchConfigurations.push(config as LaunchConfig)
+          }
+          if (this.selectedConfigIndex < 0) {
+            this.selectedConfigIndex = 0
+          }
+          await this.saveLaunchConfigurations()
+          return true
+        }
+      } catch {
+        // 忽略
+      }
+      return false
+    },
+
+    /** 从 VS Code 导入配置 */
+    async importFromVSCode(): Promise<boolean> {
+      if (!this.workspaceFolder) return false
+
+      const api = window.electronAPI?.debug
+      if (!api) return false
+
+      try {
+        const result = await api.importFromVSCode(this.workspaceFolder)
+        if (result.success) {
+          await this.loadLaunchConfigurations()
+          return true
+        }
+      } catch {
+        // 忽略
+      }
+      return false
     },
 
     /** 运行配置（不调试） */
@@ -906,6 +992,9 @@ export const useDebugStore = defineStore('debug', {
       this.variables.clear()
       this.consoleMessages = []
       this.exceptionFilters = []
+      this.configSource = null
+      this.detectedDebuggers = []
+      this.autoDetectionDone = false
     }
   }
 })

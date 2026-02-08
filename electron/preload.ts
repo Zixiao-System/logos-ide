@@ -2211,14 +2211,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('debug:executeInConsole', command, sessionId),
 
     // 启动配置
-    readLaunchConfig: (workspaceFolder: string): Promise<{ success: boolean; config?: LaunchConfigFile; error?: string }> =>
+    readLaunchConfig: (workspaceFolder: string): Promise<{ success: boolean; config?: LaunchConfigFile; source?: 'logos' | 'vscode' | null; error?: string }> =>
       ipcRenderer.invoke('debug:readLaunchConfig', workspaceFolder),
 
     writeLaunchConfig: (workspaceFolder: string, config: LaunchConfigFile): Promise<{ success: boolean; error?: string }> =>
       ipcRenderer.invoke('debug:writeLaunchConfig', workspaceFolder, config),
 
-    getDefaultLaunchConfig: (type: string, workspaceFolder: string): Promise<DebugConfig> =>
+    getDefaultLaunchConfig: (type: string, workspaceFolder: string): Promise<{ success: boolean; config?: DebugConfig }> =>
       ipcRenderer.invoke('debug:getDefaultLaunchConfig', type, workspaceFolder),
+
+    autoGenerateConfigurations: (workspaceFolder: string): Promise<{ success: boolean; configurations?: DebugConfig[]; error?: string }> =>
+      ipcRenderer.invoke('debug:autoGenerateConfigurations', workspaceFolder),
+
+    importFromVSCode: (workspaceFolder: string): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke('debug:importFromVSCode', workspaceFolder),
 
     // 适配器管理
     getAvailableAdapters: (): Promise<{ success: boolean; adapters?: AdapterInfo[]; error?: string }> =>
@@ -3535,9 +3541,11 @@ declare global {
         executeInConsole: (command: string, sessionId?: string) => Promise<{ success: boolean; result?: EvaluateResult; error?: string }>
 
         // 启动配置
-        readLaunchConfig: (workspaceFolder: string) => Promise<{ success: boolean; config?: LaunchConfigFile; error?: string }>
+        readLaunchConfig: (workspaceFolder: string) => Promise<{ success: boolean; config?: LaunchConfigFile; source?: 'logos' | 'vscode' | null; error?: string }>
         writeLaunchConfig: (workspaceFolder: string, config: LaunchConfigFile) => Promise<{ success: boolean; error?: string }>
-        getDefaultLaunchConfig: (type: string, workspaceFolder: string) => Promise<DebugConfig>
+        getDefaultLaunchConfig: (type: string, workspaceFolder: string) => Promise<{ success: boolean; config?: DebugConfig }>
+        autoGenerateConfigurations: (workspaceFolder: string) => Promise<{ success: boolean; configurations?: DebugConfig[]; error?: string }>
+        importFromVSCode: (workspaceFolder: string) => Promise<{ success: boolean; error?: string }>
 
         // 事件监听
         onSessionCreated: (callback: (session: DebugSession) => void) => () => void
@@ -3559,6 +3567,11 @@ declare global {
         // 活动文件管理
         setActiveFile: (filePath: string | null) => Promise<void>
         getActiveFile: () => Promise<string | null>
+
+        // 适配器管理
+        getAvailableAdapters: () => Promise<{ success: boolean; adapters?: AdapterInfo[]; error?: string }>
+        getInstalledAdapters: () => Promise<{ success: boolean; adapters?: AdapterInfo[]; error?: string }>
+        detectDebuggers: (workspaceFolder: string) => Promise<{ success: boolean; debuggers?: DetectedDebugger[]; error?: string }>
       }
 
       // 自动更新
