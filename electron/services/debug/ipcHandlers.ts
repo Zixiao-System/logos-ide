@@ -155,6 +155,39 @@ export function registerDebugHandlers(getMainWindow: () => BrowserWindow | null)
     return debugService.getBreakpointsForFile(filePath)
   })
 
+  ipcMain.handle('debug:editBreakpoint', async (_, breakpointId: string, options: {
+    condition?: string
+    hitCondition?: string
+    logMessage?: string
+  }) => {
+    try {
+      const breakpoint = await debugService.editBreakpoint(breakpointId, options)
+      return { success: true, breakpoint }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // ============ Exception Breakpoints ============
+
+  ipcMain.handle('debug:setExceptionBreakpoints', async (_, filters: string[], filterOptions?: Array<{ filterId: string; condition?: string }>, sessionId?: string) => {
+    try {
+      await debugService.setExceptionBreakpoints(filters, filterOptions, sessionId)
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  ipcMain.handle('debug:getExceptionFilters', (_, sessionId?: string) => {
+    try {
+      const filters = debugService.getExceptionFilters(sessionId)
+      return { success: true, filters }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
   // ============ Variables & Stack Trace ============
 
   ipcMain.handle('debug:getThreads', async (_, sessionId?: string) => {
@@ -252,8 +285,8 @@ export function registerDebugHandlers(getMainWindow: () => BrowserWindow | null)
 
   ipcMain.handle('debug:readLaunchConfig', async (_, workspaceFolder: string) => {
     try {
-      const config = await debugService.readLaunchConfig(workspaceFolder)
-      return { success: true, config }
+      const result = await debugService.readLaunchConfig(workspaceFolder)
+      return { success: true, config: result.config, source: result.source }
     } catch (error) {
       return { success: false, error: (error as Error).message }
     }
@@ -270,6 +303,26 @@ export function registerDebugHandlers(getMainWindow: () => BrowserWindow | null)
 
   ipcMain.handle('debug:getDefaultLaunchConfig', (_, type: string, workspaceFolder: string) => {
     return debugService.getDefaultLaunchConfig(type, workspaceFolder)
+  })
+
+  // ============ Auto-Generation & VS Code Import ============
+
+  ipcMain.handle('debug:autoGenerateConfigurations', async (_, workspaceFolder: string) => {
+    try {
+      const configurations = await debugService.autoGenerateConfigurations(workspaceFolder)
+      return { success: true, configurations }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  ipcMain.handle('debug:importFromVSCode', async (_, workspaceFolder: string) => {
+    try {
+      const imported = await debugService.importFromVSCode(workspaceFolder)
+      return { success: imported }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
   })
 
   // ============ Adapter Management ============

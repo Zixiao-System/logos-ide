@@ -123,7 +123,9 @@ async function createDefaultConfig() {
   if (!api) return
 
   // 创建默认 Node.js 配置
-  const defaultConfig = await api.getDefaultLaunchConfig('node', workspaceFolder)
+  const result = await api.getDefaultLaunchConfig('node', workspaceFolder)
+  if (!result.success || !result.config) return
+  const defaultConfig = result.config
 
   const launchFile = {
     version: '0.2.0',

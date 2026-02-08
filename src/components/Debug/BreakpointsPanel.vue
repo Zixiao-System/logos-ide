@@ -14,6 +14,35 @@
       </mdui-button-icon>
     </div>
 
+    <!-- 异常断点过滤器 -->
+    <div class="exception-filters" v-if="debugStore.exceptionFilters.length > 0">
+      <div class="section-header">异常断点</div>
+      <div
+        v-for="filter in debugStore.exceptionFilters"
+        :key="filter.filterId"
+        class="exception-filter-item"
+      >
+        <mdui-checkbox
+          :checked="filter.enabled"
+          @change="toggleExceptionFilter(filter.filterId)"
+        ></mdui-checkbox>
+        <div class="filter-info">
+          <span class="filter-label">{{ filter.label }}</span>
+          <span class="filter-description" v-if="filter.description">{{ filter.description }}</span>
+        </div>
+        <input
+          v-if="filter.supportsCondition && filter.enabled"
+          class="filter-condition-input"
+          type="text"
+          :value="filter.condition || ''"
+          :placeholder="filter.conditionDescription || '条件表达式'"
+          @change="updateFilterCondition(filter.filterId, ($event.target as HTMLInputElement).value)"
+          @keydown.stop
+        />
+      </div>
+      <mdui-divider></mdui-divider>
+    </div>
+
     <!-- 断点列表 -->
     <div class="breakpoints-list">
       <div
@@ -52,7 +81,7 @@
         </mdui-button-icon>
       </div>
 
-      <div v-if="debugStore.allBreakpoints.length === 0" class="empty-state">
+      <div v-if="debugStore.allBreakpoints.length === 0 && debugStore.exceptionFilters.length === 0" class="empty-state">
         <mdui-icon-radio-button-unchecked></mdui-icon-radio-button-unchecked>
         <p>没有断点</p>
         <p class="hint">点击编辑器行号设置断点</p>
@@ -111,10 +140,17 @@ async function removeAllBreakpoints() {
   }
 }
 
+function toggleExceptionFilter(filterId: string) {
+  debugStore.toggleExceptionFilter(filterId)
+}
+
+function updateFilterCondition(filterId: string, condition: string) {
+  debugStore.updateExceptionFilterCondition(filterId, condition)
+}
+
 function goToBreakpoint(bp: BreakpointInfo) {
   if (bp.source.path) {
     editorStore.openFile(bp.source.path)
-    // 跳转到行号需要通过编辑器组件实现
   }
 }
 
@@ -140,6 +176,64 @@ function getFileName(path: string): string {
 .breakpoints-list {
   flex: 1;
   overflow: auto;
+}
+
+.exception-filters {
+  border-bottom: 1px solid var(--mdui-color-outline-variant);
+}
+
+.section-header {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--mdui-color-outline);
+  padding: 6px 12px 2px;
+}
+
+.exception-filter-item {
+  display: flex;
+  align-items: center;
+  padding: 4px 12px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.exception-filter-item:hover {
+  background: var(--mdui-color-surface-container-highest);
+}
+
+.filter-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.filter-label {
+  font-size: 13px;
+}
+
+.filter-description {
+  font-size: 11px;
+  color: var(--mdui-color-outline);
+}
+
+.filter-condition-input {
+  width: 100%;
+  margin-left: 32px;
+  margin-bottom: 4px;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-family: monospace;
+  background: var(--mdui-color-surface-container);
+  color: var(--mdui-color-on-surface);
+  border: 1px solid var(--mdui-color-outline-variant);
+  border-radius: 3px;
+  outline: none;
+}
+
+.filter-condition-input:focus {
+  border-color: var(--mdui-color-primary);
 }
 
 .breakpoint-item {
