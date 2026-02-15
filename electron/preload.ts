@@ -2155,6 +2155,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ): Promise<{ success: boolean; error?: string }> =>
       ipcRenderer.invoke('debug:setExceptionBreakpoints', filters, filterOptions, sessionId),
 
+    // 函数断点
+    setFunctionBreakpoints: (
+      breakpoints: Array<{ name: string; condition?: string; hitCondition?: string }>,
+      sessionId?: string
+    ): Promise<{ success: boolean; breakpoints?: Array<{ verified: boolean; message?: string }>; error?: string }> =>
+      ipcRenderer.invoke('debug:setFunctionBreakpoints', breakpoints, sessionId),
+
+    // 调试控制台自动补全
+    completions: (
+      text: string,
+      column: number,
+      frameId?: number,
+      sessionId?: string
+    ): Promise<{ success: boolean; items?: Array<{ label: string; text?: string; type?: string }>; error?: string }> =>
+      ipcRenderer.invoke('debug:completions', text, column, frameId, sessionId),
+
     getExceptionFilters: (sessionId?: string): Promise<{ success: boolean; filters?: Array<{ filter: string; label: string; description?: string; default?: boolean; supportsCondition?: boolean; conditionDescription?: string }>; error?: string }> =>
       ipcRenderer.invoke('debug:getExceptionFilters', sessionId),
 
@@ -3510,6 +3526,20 @@ declare global {
           sessionId?: string
         ) => Promise<{ success: boolean; error?: string }>
         getExceptionFilters: (sessionId?: string) => Promise<{ success: boolean; filters?: Array<{ filter: string; label: string; description?: string; default?: boolean; supportsCondition?: boolean; conditionDescription?: string }>; error?: string }>
+
+        // 函数断点
+        setFunctionBreakpoints: (
+          breakpoints: Array<{ name: string; condition?: string; hitCondition?: string }>,
+          sessionId?: string
+        ) => Promise<{ success: boolean; breakpoints?: Array<{ verified: boolean; message?: string }>; error?: string }>
+
+        // 调试控制台自动补全
+        completions: (
+          text: string,
+          column: number,
+          frameId?: number,
+          sessionId?: string
+        ) => Promise<{ success: boolean; items?: Array<{ label: string; text?: string; type?: string }>; error?: string }>
 
         // 变量和栈帧
         getThreads: (sessionId?: string) => Promise<{ success: boolean; threads?: DebugThread[]; error?: string }>

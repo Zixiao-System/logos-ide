@@ -501,6 +501,40 @@ export class DebugService extends EventEmitter {
     return this.breakpoints.get(filePath) || []
   }
 
+  // ============ Function Breakpoints ============
+
+  /**
+   * Set function breakpoints
+   */
+  async setFunctionBreakpoints(
+    breakpoints: Array<{ name: string; condition?: string; hitCondition?: string }>,
+    sessionId?: string
+  ): Promise<Array<{ verified: boolean; message?: string }>> {
+    const entry = this.getSessionEntry(sessionId)
+    if (!entry) return []
+
+    const result = await entry.client.setFunctionBreakpoints(breakpoints)
+    return result.map(bp => ({ verified: bp.verified, message: bp.message }))
+  }
+
+  // ============ Debug Console Completions ============
+
+  /**
+   * Get completions for the debug console
+   */
+  async getCompletions(
+    text: string,
+    column: number,
+    frameId?: number,
+    sessionId?: string
+  ): Promise<Array<{ label: string; text?: string; type?: string }>> {
+    const entry = this.getSessionEntry(sessionId)
+    if (!entry) return []
+
+    const items = await entry.client.completions(text, column, frameId)
+    return items.map(item => ({ label: item.label, text: item.text, type: item.type }))
+  }
+
   // ============ Variables & Evaluation ============
 
   /**

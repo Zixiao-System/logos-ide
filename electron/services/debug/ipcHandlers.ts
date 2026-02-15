@@ -168,6 +168,28 @@ export function registerDebugHandlers(getMainWindow: () => BrowserWindow | null)
     }
   })
 
+  // ============ Function Breakpoints ============
+
+  ipcMain.handle('debug:setFunctionBreakpoints', async (_, breakpoints: Array<{ name: string; condition?: string; hitCondition?: string }>, sessionId?: string) => {
+    try {
+      const result = await debugService.setFunctionBreakpoints(breakpoints, sessionId)
+      return { success: true, breakpoints: result }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  // ============ Debug Console Completions ============
+
+  ipcMain.handle('debug:completions', async (_, text: string, column: number, frameId?: number, sessionId?: string) => {
+    try {
+      const items = await debugService.getCompletions(text, column, frameId, sessionId)
+      return { success: true, items }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
   // ============ Exception Breakpoints ============
 
   ipcMain.handle('debug:setExceptionBreakpoints', async (_, filters: string[], filterOptions?: Array<{ filterId: string; condition?: string }>, sessionId?: string) => {

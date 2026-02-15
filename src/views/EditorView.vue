@@ -18,6 +18,7 @@ import { registerExtensionProviders } from '@/services/extensions/extensionProvi
 import { InlineBlameProvider, injectBlameStyles, BlameHoverCard, FileHistoryPanel } from '@/components/GitLens'
 import { registerDebugHoverProvider, disposeDebugHoverProvider } from '@/services/debug/debugHoverProvider'
 import { BreakpointInlineWidget, type BreakpointEditMode } from '@/services/debug/BreakpointInlineWidget'
+import { computeInlineValues } from '@/services/debug/inlineValuesProvider'
 
 // 初始化自定义语言支持（Vue, JSX, TSX）
 initializeMonacoLanguages()
@@ -108,6 +109,7 @@ function notifySelectionChange(model: monaco.editor.ITextModel | null, selection
 // 断点装饰器 ID 映射
 const breakpointDecorations = new Map<string, string[]>() // filePath -> decoration IDs
 const currentLineDecoration = ref<string[]>([]) // 当前执行行装饰器
+const inlineValueDecorations = ref<string[]>([]) // 内联调试值装饰器
 let activeBreakpointWidget: BreakpointInlineWidget | null = null
 
 // Inline Blame Provider
@@ -615,6 +617,9 @@ watch(() => editorStore.activeTabId, (newId) => {
     activeBreakpointWidget = null
   }
 
+  // Clear inline debug values when switching tabs
+  clearInlineValues()
+
   if (newId && activeTab.value) {
     loadTabIntoEditor(activeTab.value)
   } else {
@@ -793,6 +798,48 @@ watch(() => debugStore.currentFrame, (frame) => {
 watch(() => debugStore.isPaused, (isPaused) => {
   if (!isPaused && activeTab.value) {
     updateCurrentLineDecoration(activeTab.value.path, null)
+    // Clear inline values when continuing
+    clearInlineValues()
+  }
+})
+
+// ============ 内联调试值 ============
+
+/** 更新内联调试值装饰器 */
+async function updateInlineValues() {
+  if (!editor || !debugStore.isPaused || !debugStore.currentFrameId) {
+    clearInlineValues()
+    return
+  }
+
+  // Load scopes and variables for current frame
+  await debugStore.loadScopes(debugStore.currentFrameId)
+  for (const scope of debugStore.scopes) {
+    if (!scope.expensive) {
+      await debugStore.loadVariables(scope.variablesReference)
+    }
+  }
+
+  const decorations = computeInlineValues(editor, debugStore.scopes, debugStore.variables)
+  inlineValueDecorations.value = editor.deltaDecorations(
+    inlineValueDecorations.value,
+    decorations as monaco.editor.IModelDeltaDecoration[]
+  )
+}
+
+/** 清除内联调试值 */
+function clearInlineValues() {
+  if (editor) {
+    inlineValueDecorations.value = editor.deltaDecorations(inlineValueDecorations.value, [])
+  }
+}
+
+// 监听当前帧变化，更新内联调试值
+watch(() => debugStore.currentFrameId, (frameId) => {
+  if (frameId && debugStore.isPaused) {
+    updateInlineValues()
+  } else {
+    clearInlineValues()
   }
 })
 
@@ -1164,6 +1211,14 @@ onUnmounted(() => {
 /* 悬停时显示断点区域 */
 .monaco-editor .margin-view-overlays .glyph-margin:hover {
   cursor: pointer;
+}
+
+/* 内联调试值 */
+.debug-inline-value {
+  color: rgba(150, 150, 150, 0.8);
+  font-style: italic;
+  font-size: 0.9em;
+  margin-left: 8px;
 }
 </style>
 

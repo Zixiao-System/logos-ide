@@ -91,6 +91,16 @@ export interface WatchExpression {
   error?: string
 }
 
+/** 函数断点 */
+export interface FunctionBreakpoint {
+  id: string
+  name: string
+  enabled: boolean
+  verified: boolean
+  condition?: string
+  hitCondition?: string
+}
+
 /** 调试控制台消息 */
 export interface DebugConsoleMessage {
   type: 'input' | 'output' | 'error' | 'warning' | 'info'
@@ -181,6 +191,11 @@ export interface DebugState {
 
   // 断点
   breakpoints: Map<string, BreakpointInfo[]>  // filePath -> breakpoints
+  functionBreakpoints: FunctionBreakpoint[]
+
+  // 线程
+  activeThreads: DebugThread[]
+  threadStackFrames: Map<number, StackFrame[]>  // threadId -> stack frames
 
   // 栈帧
   currentThreadId: number | null
@@ -216,6 +231,9 @@ export const useDebugStore = defineStore('debug', {
     detectedDebuggers: [],
     autoDetectionDone: false,
     breakpoints: new Map(),
+    functionBreakpoints: [],
+    activeThreads: [],
+    threadStackFrames: new Map(),
     currentThreadId: null,
     currentFrameId: null,
     stackFrames: [],
@@ -371,7 +389,7 @@ export const useDebugStore = defineStore('debug', {
       try {
         const result = await api.writeLaunchConfig(this.workspaceFolder, {
           version: '0.2.0',
-          configurations: this.launchConfigurations
+          configurations: JSON.parse(JSON.stringify(this.launchConfigurations))
         })
         return result.success
       } catch {
@@ -574,6 +592,106 @@ export const useDebugStore = defineStore('debug', {
       }
     },
 
+    // ============ 函数断点管理 ============
+
+    /** 添加函数断点 */
+    async addFunctionBreakpoint(name: string, condition?: string, hitCondition?: string) {
+      const bp: FunctionBreakpoint = {
+        id: `fbp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        name,
+        enabled: true,
+        verified: false,
+        condition,
+        hitCondition
+      }
+      this.functionBreakpoints.push(bp)
+      await this.syncFunctionBreakpoints()
+    },
+
+    /** 移除函数断点 */
+    async removeFunctionBreakpoint(id: string) {
+      const index = this.functionBreakpoints.findIndex(bp => bp.id === id)
+      if (index !== -1) {
+        this.functionBreakpoints.splice(index, 1)
+        await this.syncFunctionBreakpoints()
+      }
+    },
+
+    /** 切换函数断点启用状态 */
+    async toggleFunctionBreakpoint(id: string) {
+      const bp = this.functionBreakpoints.find(b => b.id === id)
+      if (bp) {
+        bp.enabled = !bp.enabled
+        await this.syncFunctionBreakpoints()
+      }
+    },
+
+    /** 同步函数断点到适配器 */
+    async syncFunctionBreakpoints() {
+      const api = window.electronAPI?.debug
+      if (!api) return
+
+      const enabledBps = this.functionBreakpoints
+        .filter(bp => bp.enabled)
+        .map(bp => ({
+          name: bp.name,
+          condition: bp.condition,
+          hitCondition: bp.hitCondition
+        }))
+
+      try {
+        const result = await api.setFunctionBreakpoints(enabledBps)
+        if (result.success && result.breakpoints) {
+          // Update verified state
+          let i = 0
+          for (const bp of this.functionBreakpoints) {
+            if (bp.enabled && i < result.breakpoints.length) {
+              bp.verified = result.breakpoints[i].verified
+              i++
+            }
+          }
+        }
+      } catch {
+        // Ignore sync errors
+      }
+    },
+
+    // ============ 多线程管理 ============
+
+    /** 加载所有线程 */
+    async loadThreads() {
+      const api = window.electronAPI?.debug
+      if (!api) return
+
+      const result = await api.getThreads(this.activeSessionId || undefined)
+      if (result.success && result.threads) {
+        this.activeThreads = result.threads
+      }
+    },
+
+    /** 加载所有线程的栈帧 */
+    async loadAllStackTraces() {
+      const api = window.electronAPI?.debug
+      if (!api) return
+
+      for (const thread of this.activeThreads) {
+        const result = await api.getStackTrace(thread.id, this.activeSessionId || undefined)
+        if (result.success && result.frames) {
+          this.threadStackFrames.set(thread.id, result.frames)
+        }
+      }
+    },
+
+    /** 设置当前线程 */
+    setCurrentThread(threadId: number) {
+      this.currentThreadId = threadId
+      const frames = this.threadStackFrames.get(threadId)
+      if (frames && frames.length > 0) {
+        this.stackFrames = frames
+        this.currentFrameId = frames[0].id
+      }
+    },
+
     // ============ 栈帧管理 ============
 
     /** 设置栈帧 */
@@ -727,16 +845,26 @@ export const useDebugStore = defineStore('debug', {
     // ============ 事件处理 ============
 
     /** 处理停止事件 */
-    handleStopped(sessionId: string, threadId: number) {
+    async handleStopped(sessionId: string, threadId: number) {
       this.updateSessionState(sessionId, 'stopped')
       this.currentThreadId = threadId
       this.activePanel = 'variables'
+
+      // Load threads and stack traces for multi-thread support
+      await this.loadThreads()
+      if (this.activeThreads.length > 0) {
+        await this.loadStackTrace(threadId)
+        // Also load traces for stopped thread into threadStackFrames
+        this.threadStackFrames.set(threadId, [...this.stackFrames])
+      }
     },
 
     /** 处理继续事件 */
     handleContinued(sessionId: string) {
       this.updateSessionState(sessionId, 'running')
       this.clearStackFrames()
+      this.activeThreads = []
+      this.threadStackFrames.clear()
     },
 
     /** 初始化事件监听器 */
@@ -805,7 +933,9 @@ export const useDebugStore = defineStore('debug', {
       const api = window.electronAPI?.debug
       if (!api) return null
 
-      const result = await api.startSession(config, workspaceFolder)
+      // Deep-clone to strip Vue reactive proxies — IPC structured clone can't handle them
+      const plainConfig = JSON.parse(JSON.stringify(config))
+      const result = await api.startSession(plainConfig, workspaceFolder)
       if (result.success && result.session) {
         this.addSession(result.session)
         return result.session
@@ -988,6 +1118,8 @@ export const useDebugStore = defineStore('debug', {
       this.currentThreadId = null
       this.currentFrameId = null
       this.stackFrames = []
+      this.activeThreads = []
+      this.threadStackFrames.clear()
       this.scopes = []
       this.variables.clear()
       this.consoleMessages = []

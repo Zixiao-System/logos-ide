@@ -12,6 +12,9 @@
       <mdui-button-icon @click="removeAllBreakpoints" title="删除所有断点">
         <mdui-icon-delete-sweep></mdui-icon-delete-sweep>
       </mdui-button-icon>
+      <mdui-button-icon @click="showFunctionBpInput = true" title="添加函数断点">
+        <mdui-icon-add></mdui-icon-add>
+      </mdui-button-icon>
     </div>
 
     <!-- 异常断点过滤器 -->
@@ -40,6 +43,55 @@
           @keydown.stop
         />
       </div>
+      <mdui-divider></mdui-divider>
+    </div>
+
+    <!-- 函数断点 -->
+    <div class="function-breakpoints" v-if="debugStore.functionBreakpoints.length > 0 || showFunctionBpInput">
+      <div class="section-header">函数断点</div>
+
+      <!-- 添加函数断点输入框 -->
+      <div v-if="showFunctionBpInput" class="function-bp-input">
+        <input
+          class="function-bp-name-input"
+          type="text"
+          v-model="newFunctionBpName"
+          placeholder="函数名称..."
+          @keydown.enter="addFunctionBreakpoint"
+          @keydown.escape="cancelFunctionBpInput"
+          @keydown.stop
+          autofocus
+        />
+      </div>
+
+      <div
+        v-for="fbp in debugStore.functionBreakpoints"
+        :key="fbp.id"
+        class="breakpoint-item"
+        :class="{ disabled: !fbp.enabled, unverified: !fbp.verified }"
+      >
+        <mdui-checkbox
+          :checked="fbp.enabled"
+          @change="toggleFunctionBreakpoint(fbp.id)"
+        ></mdui-checkbox>
+
+        <div class="breakpoint-icon function">f()</div>
+
+        <div class="breakpoint-info">
+          <div class="breakpoint-location">{{ fbp.name }}</div>
+          <div class="breakpoint-condition" v-if="fbp.condition">
+            条件: {{ fbp.condition }}
+          </div>
+        </div>
+
+        <mdui-button-icon
+          class="remove-button"
+          @click="removeFunctionBreakpoint(fbp.id)"
+        >
+          <mdui-icon-close></mdui-icon-close>
+        </mdui-button-icon>
+      </div>
+
       <mdui-divider></mdui-divider>
     </div>
 
@@ -91,7 +143,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { useDebugStore, type BreakpointInfo } from '@/stores/debug'
 import { useEditorStore } from '@/stores/editor'
 
@@ -156,6 +208,30 @@ function goToBreakpoint(bp: BreakpointInfo) {
 
 function getFileName(path: string): string {
   return path.split('/').pop() || path.split('\\').pop() || path
+}
+
+const showFunctionBpInput = ref(false)
+const newFunctionBpName = ref('')
+
+async function addFunctionBreakpoint() {
+  const name = newFunctionBpName.value.trim()
+  if (!name) return
+  await debugStore.addFunctionBreakpoint(name)
+  newFunctionBpName.value = ''
+  showFunctionBpInput.value = false
+}
+
+function cancelFunctionBpInput() {
+  newFunctionBpName.value = ''
+  showFunctionBpInput.value = false
+}
+
+async function removeFunctionBreakpoint(id: string) {
+  await debugStore.removeFunctionBreakpoint(id)
+}
+
+async function toggleFunctionBreakpoint(id: string) {
+  await debugStore.toggleFunctionBreakpoint(id)
 }
 </script>
 
@@ -308,6 +384,32 @@ function getFileName(path: string): string {
 
 .breakpoint-item:hover .remove-button {
   opacity: 1;
+}
+
+.function-breakpoints {
+  border-bottom: 1px solid var(--mdui-color-outline-variant);
+}
+
+.function-bp-input {
+  padding: 4px 12px;
+}
+
+.function-bp-name-input {
+  width: 100%;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-family: monospace;
+  background: var(--mdui-color-surface-container);
+  color: var(--mdui-color-on-surface);
+  border: 1px solid var(--mdui-color-primary);
+  border-radius: 3px;
+  outline: none;
+}
+
+.breakpoint-icon.function {
+  background: var(--mdui-color-secondary);
+  font-size: 9px;
+  border-radius: 4px;
 }
 
 .empty-state {
