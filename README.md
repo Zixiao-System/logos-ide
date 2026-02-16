@@ -18,7 +18,7 @@
 
 [Download](#download) | [Features](#features) | [Development](#development) | [Documentation](#documentation)
 
-**公告：明天是中国的春节，需要冻结到初八，暂时归档**
+~~公告：明天是中国的春节，需要冻结到初八，暂时归档~~有BUG，先hotfix
 
 </div>
 
